@@ -3,7 +3,9 @@ services:
   # 前端服务 - 静态文件服务
   # =============================================================================
   frontend:
-    image: ghcr.io/aishu-opsrobot/openclaw-observability-web:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: openclaw-observability-frontend
     restart: unless-stopped
     ports:
@@ -15,10 +17,17 @@ services:
       - openclaw-observability
 
   # =============================================================================
+  # 数据库初始化容器 - 等待 Doris 就绪后创建数据库和表
+  # =============================================================================
+  # 已移除：初始化逻辑直接集成到 doris 容器内部
+
+  # =============================================================================
   # API 服务 - Node.js 后端
   # =============================================================================
   api:
-    image: ghcr.io/aishu-opsrobot/openclaw-observability-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     container_name: openclaw-observability-api
     restart: unless-stopped
     ports:
