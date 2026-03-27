@@ -8,7 +8,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: ./frontend/Dockerfile.frontend
+      dockerfile: ./frontend/Dockerfile
     container_name: frontend
     restart: unless-stopped
     ports:
@@ -32,7 +32,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: ./backend/Dockerfile.backend
+      dockerfile: ./backend/Dockerfile
     container_name: backend
     restart: unless-stopped
     ports:
