@@ -142,7 +142,10 @@ vite.config.js.timestamp-*
 .cursor/
 cursor/
 datamodel/
-.claude/
 AGENTS.md
 
 
+dist/
+public
+.DS_Store
+.claude

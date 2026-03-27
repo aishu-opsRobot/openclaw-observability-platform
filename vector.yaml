@@ -19,6 +19,25 @@ sources:
     fingerprint:
       strategy: device_and_inode
 
+  # 采集 gateway 日志文件
+  openclaw_gateway_logs:
+    type: file
+    include:
+    - "/Users/lxg/.openclaw/logs/gateway.log"
+    - "/Users/lxg/.openclaw/logs/gateway.err.log"
+    read_from: beginning
+    fingerprint:
+      strategy: device_and_inode
+
+  # 采集 config-audit 日志文件
+  openclaw_config_audit_logs:
+    type: file
+    include:
+    - "/Users/lxg/.openclaw/logs/config-audit.jsonl"
+    read_from: beginning
+    fingerprint:
+      strategy: device_and_inode
+
 transforms:
   # 1. 过滤掉 stderr 事件，只保留 stdout
   filter_stdout:
@@ -135,19 +154,106 @@ transforms:
       del(.file)
       del(.source_type)
 
-sinks:
-  print_to_console:
-    type: console
+  # 5. 解析 gateway 日志格式
+  # 日志格式：2026-03-24T13:36:06.199+08:00 [canvas] host mounted at http://...
+  gateway_logs_transform:
+    type: remap
     inputs:
-    - parse_and_split
-    encoding:
-      codec: json
+    - openclaw_gateway_logs
+    drop_on_error: false
+    drop_on_abort: false
+    source: |
+      raw_message = string(.message) ?? ""
+      filepath = string(.file) ?? ""
+
+      # 根据文件名判断 level：.err.log 文件默认 error，其他默认 info
+      if contains(filepath, ".err.log") {
+        .level = "error"
+      } else {
+        .level = "info"
+      }
+
+      # 使用正则解析日志行
+      # 格式：时间戳 [module] 日志内容
+      parts, err = parse_regex(raw_message, r'^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{2}:\d{2})\s+\[(?P<module>[^\]]+)\]\s+(?P<content>.*)$')
+
+      if err == null && parts != null {
+        ts_raw = string!(get!(parts, ["ts"]))
+        # 转换时间格式：2026-03-24T13:36:06.199+08:00 -> 2026-03-24 13:36:06
+        event_time_str = replace(ts_raw, "T", " ")
+        event_parts = split(event_time_str, ".")
+        .event_time = get!(event_parts, [0])
+        .module = string!(get!(parts, ["module"]))
+        .log_attributes = raw_message
+      } else {
+        # 解析失败时设置默认值
+        .event_time = ""
+        .module = ""
+        .log_attributes = raw_message
+      }
+
+      # 清理无用字段
+      del(.message)
+      del(.file)
+      del(.source_type)
+      del(.timestamp)
+      del(.host)
+
+  # 6. 解析 config-audit JSONL 日志格式
+  # 每行一个 JSON 对象，提取 event_time 和 log_attributes
+  config_audit_logs_transform:
+    type: remap
+    inputs:
+    - openclaw_config_audit_logs
+    drop_on_error: false
+    drop_on_abort: false
+    source: |
+      raw_message = string(.message) ?? ""
+
+      # 解析 JSON
+      obj, err = parse_json(raw_message)
+
+      if err == null && obj != null {
+        # 提取 ts 字段作为 event_time
+        ts_val = get(obj, ["ts"]) ?? ""
+        if ts_val != "" {
+          # 转换时间格式：2026-03-24T09:22:54.136Z -> 2026-03-24 09:22:54
+          ts_str = string!(ts_val)
+          # 替换 T 为空格
+          ts_str = replace(ts_str, "T", " ")
+          # 截取到秒（去掉毫秒 .136 和时区 Z）
+          parts = split(ts_str, ".")
+          .event_time = get!(parts, [0])
+        } else {
+          .event_time = ""
+        }
+        # log_attributes 为当前行记录（整个 JSON 对象）
+        .log_attributes = obj
+      } else {
+        .event_time = ""
+        .log_attributes = raw_message
+      }
+
+      # 清理无用字段
+      del(.message)
+      del(.file)
+      del(.source_type)
+      del(.timestamp)
+      del(.host)
+
+sinks:
+  # print_to_console:
+  #   type: console
+  #   inputs:
+  #   - parse_and_split
+  #   encoding:
+  #     codec: json
 
   to_doris:
     type: http
     inputs:
     - parse_and_split
-    uri: "http://127.0.0.1:8040/api/otel/agent_sessions/_stream_load"
+    uri: "http://host.docker.internal:8040/api/otel/agent_sessions/_stream_load"
     method: put
     auth:
       strategy: basic
@@ -163,19 +269,73 @@ sinks:
         partial_columns: "true"
 
   # 会话日志输出到控制台（调试用）
-  session_logs_to_console:
-    type: console
-    inputs:
-    - session_logs_transform
-    encoding:
-      codec: json
+  # session_logs_to_console:
+  #   type: console
+  #   inputs:
+  #   - session_logs_transform
+  #   encoding:
+  #     codec: json
 
   # 会话日志输出到 Doris agent_sessions_logs 表
   session_logs_to_doris:
     type: http
     inputs:
     - session_logs_transform
-    uri: "http://127.0.0.1:8040/api/otel/agent_sessions_logs/_stream_load" # doris 
+    uri: "http://host.docker.internal:8040/api/otel/agent_sessions_logs/_stream_load" # doris
+    method: put
+    auth:
+      strategy: basic
+      user: "root"
+      password: ""
+    encoding:
+      codec: json
+    request:
+      headers:
+        Expect: "100-continue"
+        format: "json"
+        strip_outer_array: "true"
+
+  # gateway 日志输出到控制台（调试用）
+  gateway_logs_to_console:
+    type: console
+    inputs:
+    - gateway_logs_transform
+    encoding:
+      codec: json
+
+  # gateway 日志输出到 Doris gateway_logs 表
+  gateway_logs_to_doris:
+    type: http
+    inputs:
+    - gateway_logs_transform
+    uri: "http://host.docker.internal:8040/api/otel/gateway_logs/_stream_load"
+    method: put
+    auth:
+      strategy: basic
+      user: "root"
+      password: ""
+    encoding:
+      codec: json
+    request:
+      headers:
+        Expect: "100-continue"
+        format: "json"
+        strip_outer_array: "true"
+
+  # config-audit 日志输出到控制台（调试用）
+  config_audit_logs_to_console:
+    type: console
+    inputs:
+    - config_audit_logs_transform
+    encoding:
+      codec: json
+
+  # config-audit 日志输出到 Doris audit_logs 表
+  config_audit_logs_to_doris:
+    type: http
+    inputs:
+    - config_audit_logs_transform
+    uri: "http://host.docker.internal:8040/api/otel/audit_logs/_stream_load"
     method: put
     auth:
       strategy: basic

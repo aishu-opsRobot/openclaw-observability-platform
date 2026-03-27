@@ -10,7 +10,7 @@ export function getDorisConfig() {
     port: Number(process.env.DORIS_PORT ?? 9030),
     user: process.env.DORIS_USER ?? "root",
     password: process.env.DORIS_PASSWORD ?? "",
-    database: process.env.DORIS_DATABASE ?? "otel",
+    database: process.env.DORIS_DATABASE ?? "opsRobot",
   };
 }
 

@@ -1,9 +1,9 @@
 -- 初始化 OpenClaw Observability 数据库 schema
 -- 会自动创建 otel 数据库（如不存在）以及所需的表
 
-CREATE DATABASE IF NOT EXISTS otel;
+CREATE DATABASE IF NOT EXISTS opsRobot;
 
-USE otel;
+USE opsRobot;
 
 -- agent_sessions 表：会话维度数据
 CREATE TABLE IF NOT EXISTS agent_sessions (
@@ -67,4 +67,25 @@ CREATE TABLE IF NOT EXISTS agent_sessions_logs (
 ) ENGINE=OLAP
 DUPLICATE KEY(sessionId, timestamp)
 DISTRIBUTED BY HASH(sessionId) BUCKETS 10
+PROPERTIES ('replication_num' = '1');
+
+
+
+CREATE TABLE IF NOT EXISTS `audit_logs` (
+  `event_time` datetime NULL COMMENT "审计时间",
+  `log_attributes` variant NULL COMMENT "动态审计属性"
+) ENGINE=OLAP
+DUPLICATE KEY(`event_time`)
+DISTRIBUTED BY HASH(`event_time`) BUCKETS 10
+PROPERTIES ('replication_num' = '1');
+
+
+CREATE TABLE IF NOT EXISTS `gateway_logs` (
+  `event_time` datetime NULL COMMENT "审计时间",
+  `module` varchar(64) NULL DEFAULT "",
+  `level` varchar(64) NULL DEFAULT "",
+  `log_attributes` variant NULL COMMENT "动态审计属性"
+) ENGINE=OLAP
+DUPLICATE KEY(`event_time`)
+DISTRIBUTED BY HASH(`event_time`) BUCKETS 10
 PROPERTIES ('replication_num' = '1');
