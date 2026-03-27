@@ -13,7 +13,7 @@ RUN npm ci --omit=dev
 COPY backend/ ./backend/
 
 # 复制共享的 lib 目录（前端与 API 共用）
-COPY src/lib/ ./src/lib/
+COPY frontend/lib/ ./frontend/lib/
 
 # 暴露端口
 EXPOSE 8787

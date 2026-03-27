@@ -141,5 +141,6 @@ vite.config.js.timestamp-*
 # Custom
 cursor/
 datamodel/
-
-
+dist/
+public
+.DS_Store

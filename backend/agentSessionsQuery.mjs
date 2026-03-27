@@ -2,7 +2,7 @@
  * Doris `otel.agent_sessions` 查询（供 Vite 开发中间件或独立脚本复用）
  */
 import mysql from "mysql2/promise";
-import { computeSessionAggregatesFromLogRows } from "../src/lib/sessionAudit.js";
+import { computeSessionAggregatesFromLogRows } from "../frontend/lib/sessionAudit.js";
 
 export function getDorisConfig() {
   return {
@@ -10,7 +10,7 @@ export function getDorisConfig() {
     port: Number(process.env.DORIS_PORT ?? 9030),
     user: process.env.DORIS_USER ?? "root",
     password: process.env.DORIS_PASSWORD ?? "",
-    database: process.env.DORIS_DATABASE ?? "otel",
+    database: process.env.DORIS_DATABASE ?? "opsRobot",
   };
 }
 
