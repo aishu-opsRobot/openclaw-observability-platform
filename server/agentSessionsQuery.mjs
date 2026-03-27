@@ -2,7 +2,7 @@
  * Doris `otel.agent_sessions` 查询（供 Vite 开发中间件或独立脚本复用）
  */
 import mysql from "mysql2/promise";
-import { computeSessionAggregatesFromLogRows } from "../src/lib/sessionAudit.js";
+import { computeSessionAggregatesFromLogRows } from "../frontend/lib/sessionAudit.js";
 
 export function getDorisConfig() {
   return {

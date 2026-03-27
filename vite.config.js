@@ -4,6 +4,11 @@ import { agentSessionsDevApi } from "./vite-plugins/agentSessionsDevApi.mjs";
 
 export default defineConfig({
   plugins: [react(), agentSessionsDevApi()],
+  resolve: {
+    alias: {
+      '@': '/frontend',
+    },
+  },
   /** `vite preview` 时可将 /api 转发到独立服务（先运行 `node server/serveAgentSessionsApi.mjs`） */
   preview: {
     proxy: {
