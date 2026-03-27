@@ -21,7 +21,7 @@ const PAGE_META = {
   "config-change": { title: "配置变更", subtitle: "关键配置项变更历史与合规留痕" },
   "audit-overview": {
     title: "审计概览",
-    subtitle: "核心指标、风险统计、实时态势、趋势与排行（Doris 聚合）",
+    subtitle: "核心指标、风险统计、实时态势、趋势与排行",
   },
   "session-audit": { title: "会话审计", subtitle: "OpenClaw 会话索引、模型与 Token 用量合规留痕" },
   traceability: { title: "全链路溯源", subtitle: "按会话 ID 查看链路时间轴与步骤详情" },
@@ -33,32 +33,32 @@ const PAGE_META = {
 };
 
 const NAV = [
-  { id: "panorama", label: "全景概览", icon: "panorama" },
-  {
-    id: "digital-employee",
-    label: "数字员工",
-    icon: "digitalEmployee",
-    children: [
-      { id: "digital-employee-overview", label: "员工概览" },
-      { id: "digital-employee-list", label: "员工列表" },
-    ],
-  },
-  { id: "monitoring", label: "基础监控", icon: "monitoring" },
-  { id: "alerts", label: "告警事件", icon: "alerts" },
+  // { id: "panorama", label: "全景概览", icon: "panorama" },
+  // {
+  //   id: "digital-employee",
+  //   label: "数字员工",
+  //   icon: "digitalEmployee",
+  //   children: [
+  //     { id: "digital-employee-overview", label: "员工概览" },
+  //     { id: "digital-employee-list", label: "员工列表" },
+  //   ],
+  // },
+  // { id: "monitoring", label: "基础监控", icon: "monitoring" },
+  // { id: "alerts", label: "告警事件", icon: "alerts" },
   {
     id: "security-audit",
     label: "安全审计",
     icon: "audit",
     children: [
       { id: "audit-overview", label: "审计概览" },
-      { id: "audit", label: "行为审计" },
+      // { id: "audit", label: "行为审计" },
       { id: "config-change", label: "配置变更" },
       { id: "session-audit", label: "会话审计" },
       { id: "traceability", label: "全链路溯源" },
     ],
   },
   { id: "logs", label: "日志查询", icon: "logs" },
-  { id: "inspection", label: "定期巡检", icon: "inspection" },
+  // { id: "inspection", label: "定期巡检", icon: "inspection" },
   {
     id: "cost-analysis",
     label: "成本分析",
@@ -286,18 +286,37 @@ function statusBadgeClass(status) {
 }
 
 export default function Dashboard() {
-  const [activeNav, setActiveNav] = useState("panorama");
-  const [navGroupOpen, setNavGroupOpen] = useState({
-    "digital-employee": true,
-    "cost-analysis": true,
-    "security-audit": true,
+  const [activeNav, setActiveNavRaw] = useState(() => localStorage.getItem("nav-active") || "audit-overview");
+  const [navGroupOpen, setNavGroupOpenRaw] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("nav-group-open")) || {
+        "digital-employee": true,
+        "cost-analysis": true,
+        "security-audit": true,
+      };
+    } catch {
+      return { "digital-employee": true, "cost-analysis": true, "security-audit": true };
+    }
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState("全部");
   const [status, setStatus] = useState("全部");
   const [ordersPage, setOrdersPage] = useState(1);
-  const [ordersPageSize, setOrdersPageSize] = useState(5);
+  const [ordersPageSize, setOrdersPageSize] = useState(10);
+
+  const setActiveNav = (id) => {
+    setActiveNavRaw(id);
+    localStorage.setItem("nav-active", id);
+  };
+
+  const setNavGroupOpen = (updater) => {
+    setNavGroupOpenRaw((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      localStorage.setItem("nav-group-open", JSON.stringify(next));
+      return next;
+    });
+  };
 
   const regions = ["全部", "华东", "华北", "华南", "西南"];
   const statuses = ["全部", "已完成", "处理中", "待审核", "已取消"];
@@ -333,7 +352,7 @@ export default function Dashboard() {
   const page = PAGE_META[activeNav] ?? PAGE_META.panorama;
 
   return (
-    <div className="flex min-h-screen">
+    <div className="fixed inset-0 flex overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <button
@@ -347,7 +366,7 @@ export default function Dashboard() {
       {/* Sidebar */}
       <aside
         className={[
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-gray-200/80 bg-white shadow-card transition-transform duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-none lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-gray-200/80 bg-white shadow-card transition-transform duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-none lg:static lg:shrink-0 lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         ].join(" ")}
       >
@@ -356,8 +375,8 @@ export default function Dashboard() {
             O
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">OpsRobot</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">运营中台</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">OpenclawObservability</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Openclaw可观测性平台</p>
           </div>
         </div>
 
@@ -447,7 +466,7 @@ export default function Dashboard() {
           })}
         </nav>
 
-        <div className="border-t border-gray-100 p-4 dark:border-gray-800">
+        {/* <div className="border-t border-gray-100 p-4 dark:border-gray-800">
           <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/60">
             <p className="text-xs font-medium text-gray-700 dark:text-gray-300">需要帮助？</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">查看文档或联系管理员获取权限与数据说明。</p>
@@ -458,12 +477,12 @@ export default function Dashboard() {
               打开帮助中心
             </button>
           </div>
-        </div>
+        </div> */}
       </aside>
 
       {/* Main */}
-      <div className="flex min-h-screen flex-1 flex-col lg:ml-0">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-gray-200/80 bg-white/90 px-4 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90 sm:px-6 lg:px-8">
+      <div className="relative flex min-h-0 w-0 flex-1 flex-col">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-200/80 bg-white/90 px-4 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -480,28 +499,10 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <ThemeToggle />
-            <button
-              type="button"
-              className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-              aria-label="通知"
-            >
-              <Icon name="bell" />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-950" />
-            </button>
-            <div className="hidden h-8 w-px bg-gray-200 dark:bg-gray-700 sm:block" />
-            <div className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-gray-50 dark:hover:bg-gray-800/80">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-gray-200 to-gray-300 text-xs font-semibold text-gray-700 dark:from-gray-600 dark:to-gray-700 dark:text-gray-200">
-                K
-              </div>
-              <div className="hidden text-left sm:block">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Kevin</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">管理员</p>
-              </div>
-            </div>
           </div>
         </header>
 
-        <main className="flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-6">
           {activeNav === "logs" ? (
             <LogSearch />
           ) : activeNav === "cost-overview" ? (
@@ -552,7 +553,7 @@ export default function Dashboard() {
                 ))}
               </section>
 
-              <section className="app-card p-4 sm:p-6">
+              <section className="app-card p-4 mt-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">订单明细</h2>

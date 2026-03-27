@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import CodeBlock from "../components/CodeBlock.jsx";
 import {
   Area,
   AreaChart,
@@ -306,7 +307,7 @@ export default function LogSearch() {
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">日志检索</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               库 <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">{otelDatabase}</code>
-              · 表名与 Doris 中「日志库」一致（主表或按日分表）；按时间范围查询，支持关键字与多列过滤
+              · 表名与 「日志库」一致（主表或按日分表）；按时间范围查询，支持关键字与多列过滤
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -360,7 +361,6 @@ export default function LogSearch() {
           </div>
 
           <div className="lg:col-span-4 space-y-3">
-            <p className="text-xs font-medium text-gray-600 dark:text-gray-400">时间范围</p>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <label className="flex flex-1 flex-col gap-1.5 text-xs text-gray-500 dark:text-gray-400">
                 开始
@@ -394,7 +394,7 @@ export default function LogSearch() {
 
           <div className="lg:col-span-8">
             <p className="text-xs font-medium text-gray-600 dark:text-gray-400">全文 / 关键字</p>
-            <div className="relative mt-3">
+            <div className="relative mt-2">
               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
                 <SearchIcon />
               </span>
@@ -413,7 +413,7 @@ export default function LogSearch() {
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400">多维度过滤（当前时间范围内可选值）</p>
           <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
-              类型 type
+              消息类型
               <select
                 value={type}
                 onChange={(e) => {
@@ -430,7 +430,7 @@ export default function LogSearch() {
               </select>
             </label>
             <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
-              Provider
+              提供商
               <select
                 value={provider}
                 onChange={(e) => {
@@ -464,7 +464,7 @@ export default function LogSearch() {
               </select>
             </label>
             <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
-              通道 channel
+              通道
               <select
                 value={channel}
                 onChange={(e) => {
@@ -498,7 +498,7 @@ export default function LogSearch() {
               </select>
             </label>
             <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
-              错误 message_is_error
+              是否存在错误
               <select
                 value={errorFilter}
                 onChange={(e) => {
@@ -590,30 +590,31 @@ export default function LogSearch() {
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/90 dark:border-gray-800 dark:bg-gray-900/50">
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">时间</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">级别</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">Provider</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">日志级别</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">提供商</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">Agent</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">通道</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">Parent</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">ID</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">Parent ID</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">摘要</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-950">
                 {!timeBounds ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-500">
                       请先选择有效的时间范围
                     </td>
                   </tr>
                 ) : loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-500">
                       加载中…
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-500">
                       没有符合条件的日志，请调整时间、关键字或筛选条件
                     </td>
                   </tr>
@@ -648,6 +649,7 @@ export default function LogSearch() {
                         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-gray-800 dark:text-gray-200">{row.provider ?? "—"}</td>
                         <td className="max-w-[10rem] truncate px-4 py-3 text-xs text-gray-800 dark:text-gray-200">{row.agent_name ?? "—"}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{row.channel ?? "—"}</td>
+                        <td className="max-w-[100px] truncate px-4 py-3 font-mono text-xs text-primary">{row.id ?? "—"}</td>
                         <td className="max-w-[100px] truncate px-4 py-3 font-mono text-xs text-primary">{row.parent_id ?? "—"}</td>
                         <td className="max-w-md px-4 py-3 text-gray-800 dark:text-gray-200">
                           <span className="line-clamp-2">{buildMessageLine(row)}</span>
@@ -696,7 +698,7 @@ export default function LogSearch() {
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <dl className="space-y-4 text-sm">
                 <div>
-                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">timestamp</dt>
+                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">时间</dt>
                   <dd className="mt-1 break-all font-mono text-gray-900 dark:text-gray-100">{String(detail.timestamp ?? "—")}</dd>
                 </div>
                 <div>
@@ -704,25 +706,25 @@ export default function LogSearch() {
                   <dd className="mt-1 break-all font-mono text-gray-900 dark:text-gray-100">{String(detail.sessionId ?? "—")}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">type / version</dt>
+                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">消息类型</dt>
                   <dd className="mt-1 font-mono text-gray-900 dark:text-gray-100">
                     {detail.type ?? "—"} {detail.version ? `· ${detail.version}` : ""}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">provider / model</dt>
+                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">提供商 / 模型</dt>
                   <dd className="mt-1 font-mono text-gray-900 dark:text-gray-100">
                     {detail.provider ?? "—"} · {detail.model_id ?? detail.message_model ?? "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">message_role / tool</dt>
+                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">消息角色 / 工具</dt>
                   <dd className="mt-1 text-gray-900 dark:text-gray-100">
                     {detail.message_role ?? "—"} · {detail.message_tool_name ?? "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">message_is_error</dt>
+                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">是否存在错误</dt>
                   <dd className="mt-1 font-mono text-gray-900 dark:text-gray-100">{String(detail.message_is_error ?? "—")}</dd>
                 </div>
                 <div>
@@ -730,9 +732,15 @@ export default function LogSearch() {
                   <dd className="mt-1 break-all font-mono text-primary">{String(detail.parent_id ?? "—")}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">agent_name / channel</dt>
+                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Agent名称</dt>
                   <dd className="mt-1 text-gray-900 dark:text-gray-100">
-                    {detail.agent_name ?? "—"} · {detail.channel ?? "—"}
+                    {detail.agent_name ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">通道</dt>
+                  <dd className="mt-1 text-gray-900 dark:text-gray-100">
+                    {detail.channel ?? "—"}
                   </dd>
                 </div>
                 <div>
@@ -740,10 +748,10 @@ export default function LogSearch() {
                   <dd className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-gray-800 dark:text-gray-200">{buildMessageLine(detail)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">log_attributes (JSON)</dt>
-                  <dd className="mt-2 overflow-x-auto rounded-lg bg-gray-900 p-4 font-mono text-xs leading-relaxed text-emerald-100">
-                    <pre>{safeJson(detail.log_attributes)}</pre>
-                  </dd>
+                  <dt className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">原始数据</dt>
+                  <CodeBlock text={safeJson(detail.log_attributes)} variant="dark" height="2xl">
+                    {safeJson(detail.log_attributes)}
+                  </CodeBlock>
                 </div>
               </dl>
             </div>

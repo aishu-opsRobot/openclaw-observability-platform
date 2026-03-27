@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import AgentTokenRoseChart from "../components/AgentTokenRoseChart.jsx";
 import {
   Area,
@@ -16,10 +17,22 @@ import {
   YAxis,
 } from "recharts";
 
-/** 原始 Token 数展示 */
+/** Token 数展示：自适应 K / M / B 单位 */
 function fmtTokens(n) {
   const x = Math.round(Number(n) || 0);
-  return x.toLocaleString("zh-CN");
+  if (x >= 1e9) {
+    const v = x / 1e9;
+    return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)}B`;
+  }
+  if (x >= 1e6) {
+    const v = x / 1e6;
+    return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)}M`;
+  }
+  if (x >= 1e3) {
+    const v = x / 1e3;
+    return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)}K`;
+  }
+  return String(x);
 }
 
 const CARD_ACCENTS = [
@@ -143,7 +156,7 @@ export default function CostAnalysis() {
             <div key={i} className="app-card h-40 animate-pulse bg-gray-100/80 dark:bg-gray-800/80" />
           ))}
         </div>
-        <p className="text-center text-sm text-gray-500">正在加载成本概览…</p>
+        <LoadingSpinner message="正在加载成本概览…" />
       </div>
     );
   }
@@ -158,10 +171,6 @@ export default function CostAnalysis() {
 
   return (
     <div className="space-y-6">
-      {snapshot?.legend ? (
-        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{snapshot.legend}</p>
-      ) : null}
-
       {/* 成本总览 */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {overviewCards.map((m) => (

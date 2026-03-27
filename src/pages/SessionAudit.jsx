@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import CopyButton from "../components/CopyButton.jsx";
+import CodeBlock from "../components/CodeBlock.jsx";
+import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import TablePagination, { DEFAULT_TABLE_PAGE_SIZE } from "../components/TablePagination.jsx";
 import {
   agentSessionsLogsRowsToLines,
@@ -161,20 +164,10 @@ function summaryStrip(row) {
   return JSON.stringify(o, null, 2);
 }
 
-/** 路径：目录与分隔符偏灰，文件名翠绿加粗 */
+/** 路径：整体统一颜色显示 */
 function NetPathHighlight({ path }) {
   if (path == null || path === "") return <span className="text-gray-400">—</span>;
-  const s = String(path);
-  const last = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
-  if (last < 0) {
-    return <span className="break-all font-semibold text-emerald-800">{s}</span>;
-  }
-  return (
-    <span className="break-all">
-      <span className="text-gray-600">{s.slice(0, last + 1)}</span>
-      <span className="font-semibold text-emerald-800">{s.slice(last + 1)}</span>
-    </span>
-  );
+  return <span className="break-all text-gray-800 dark:text-gray-200">{String(path)}</span>;
 }
 
 /** URL：协议、主机、路径分段着色 */
@@ -292,11 +285,15 @@ function ChatAssistantMessageBody({ msg, strArgs }) {
         }
         if (c.type === "toolCall") {
           return (
-            <div key={i} className="rounded-lg border border-gray-200 bg-gray-50/90 px-3 py-2">
-              <div className="text-xs font-semibold text-primary">
+            <div key={i} className="rounded-lg border border-gray-200 bg-gray-50/90 px-3 pb-2 pt-1">
+              <div className="mb-1 text-xs font-semibold text-primary">
                 工具调用 · <span className="font-mono">{c.name ?? "—"}</span>
               </div>
-              <pre className="mt-1 max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-gray-700">{strArgs(c.arguments)}</pre>
+              <div className="relative pr-8">
+                <CodeBlock text={strArgs(c.arguments)} variant="light" height="md" font="mono" className="max-h-48">
+                  {strArgs(c.arguments)}
+                </CodeBlock>
+              </div>
             </div>
           );
         }
@@ -318,6 +315,7 @@ function SessionAuditDetail({ row, onBack }) {
   /** 溯源回放：enriched 数组下标；null 表示未选中或已结束 */
   const [replayStep, setReplayStep] = useState(null);
   const [replayPlaying, setReplayPlaying] = useState(false);
+  const [idCopied, setIdCopied] = useState(false);
 
   /** 溯源分析固定按时间先后顺序 */
   const trace = useMemo(() => buildSessionTrace(jsonlLines, "time"), [jsonlLines]);
@@ -468,7 +466,33 @@ function SessionAuditDetail({ row, onBack }) {
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">会话 ID</dt>
-            <dd className="mt-0.5 break-all font-mono text-xs font-semibold text-violet-700 dark:text-violet-300">{row.sessionId ?? "—"}</dd>
+            <dd className="mt-0.5 flex items-start gap-1.5">
+              <span className="break-all font-mono text-xs font-semibold text-violet-700 dark:text-violet-300">{row.sessionId ?? "—"}</span>
+              {row.sessionId && (
+                <button
+                  type="button"
+                  title="复制会话 ID"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(row.sessionId).then(() => {
+                      setIdCopied(true);
+                      setTimeout(() => setIdCopied(false), 1500);
+                    }).catch(() => {});
+                  }}
+                  className="mt-0.5 shrink-0 text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition"
+                >
+                  {idCopied ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                      <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                    </svg>
+                  )}
+                </button>
+              )}
+            </dd>
           </div>
           <div>
             <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">更新时间</dt>
@@ -499,7 +523,7 @@ function SessionAuditDetail({ row, onBack }) {
           {row.label && (
             <div className="sm:col-span-2">
               <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">标签</dt>
-              <dd className="mt-2 rounded-r-md border-l-4 border-amber-400 bg-amber-50/90 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-100">
+              <dd className="inline-block mt-2 rounded-lg border-2 border-amber-400 bg-amber-50/90 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-100">
                 {row.label}
               </dd>
             </div>
@@ -509,7 +533,11 @@ function SessionAuditDetail({ row, onBack }) {
           <summary className="cursor-pointer text-xs font-medium text-indigo-800 hover:text-indigo-950 dark:text-indigo-300 dark:hover:text-indigo-200">
             完整索引 JSON（已省略技能快照等大字段）
           </summary>
-          <pre className="mt-3 max-h-64 overflow-auto font-mono text-[11px] leading-relaxed text-gray-800 dark:text-gray-200">{summaryStrip(row)}</pre>
+          <div className="relative pr-8">
+            <CodeBlock text={summaryStrip(row)} variant="dark" height="lg" font="mono" className="max-h-64">
+              {summaryStrip(row)}
+            </CodeBlock>
+          </div>
         </details>
       </section>
 
@@ -524,7 +552,7 @@ function SessionAuditDetail({ row, onBack }) {
           </p>
         </div>
 
-        {jsonlStatus === "loading" && <p className="mt-4 text-sm text-gray-500">正在加载转写…</p>}
+        {jsonlStatus === "loading" && <LoadingSpinner message="正在加载转写…" />}
         {jsonlStatus === "error" && (
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{jsonlError}</p>
         )}
@@ -835,9 +863,11 @@ function SessionAuditDetail({ row, onBack }) {
                         </button>
                       </div>
                       {raw && (
-                        <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-gray-900/90 p-3 font-mono text-[11px] leading-relaxed text-gray-100">
-                          {JSON.stringify(line, null, 2)}
-                        </pre>
+                        <div className="flex items-start justify-between gap-2">
+                          <CodeBlock text={JSON.stringify(line, null, 2)} variant="dark" height="lg" font="mono" className="mt-3 flex-1">
+                            {JSON.stringify(line, null, 2)}
+                          </CodeBlock>
+                        </div>
                       )}
                     </div>
                     </div>
@@ -898,9 +928,11 @@ function SessionAuditDetail({ row, onBack }) {
                             </button>
                           </div>
                           {raw && (
-                            <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-gray-900/90 p-3 font-mono text-[11px] leading-relaxed text-gray-100">
-                              {JSON.stringify(line, null, 2)}
-                            </pre>
+                            <div className="flex items-start justify-between gap-2">
+                              <CodeBlock text={JSON.stringify(line, null, 2)} variant="dark" height="lg" font="mono" className="mt-3 flex-1">
+                                {JSON.stringify(line, null, 2)}
+                              </CodeBlock>
+                            </div>
                           )}
                         </div>
                       </li>
@@ -998,9 +1030,12 @@ function SessionAuditDetail({ row, onBack }) {
                                     <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">错误</span>
                                   )}
                                 </div>
-                                <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-relaxed">
-                                  {messageTextContent(msg)}
-                                </pre>
+                                <div className="flex items-start justify-between gap-2">
+                                  <pre className="max-h-96 flex-1 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-relaxed">
+                                    {messageTextContent(msg)}
+                                  </pre>
+                                  <CopyButton text={messageTextContent(msg)} className="shrink-0" />
+                                </div>
                               </div>
                               {chatMetaRow("center")}
                             </div>
@@ -1010,7 +1045,10 @@ function SessionAuditDetail({ row, onBack }) {
                         return (
                           <div key={`chat-${lineIndex}-${kid}`} className="flex flex-col items-start gap-1">
                             <div className="max-w-[min(92%,720px)] rounded-2xl border border-gray-300 bg-gray-100 px-4 py-2 text-xs text-gray-800">
-                              <span className="font-medium text-gray-600">message · {role}</span>
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="font-medium text-gray-600">message · {role}</span>
+                                <CopyButton text={JSON.stringify(msg, null, 2)} className="shrink-0" />
+                              </div>
                               <pre className="mt-1 max-h-48 overflow-auto text-[11px] leading-relaxed">{JSON.stringify(msg, null, 2)}</pre>
                             </div>
                             {chatMetaRow("start")}

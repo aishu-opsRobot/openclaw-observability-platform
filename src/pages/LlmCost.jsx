@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import CostTimeRangeFilter, {
   defaultRangeLastDays,
   parseLocalMs,
@@ -138,7 +139,7 @@ export default function LlmCost() {
       "时间范围开始",
       "时间范围结束",
       "模型",
-      "Provider",
+      "提供商",
       "统计归属日",
       "Token 消耗",
       "占比",
@@ -166,10 +167,6 @@ export default function LlmCost() {
         onChangeEnd={setRangeEnd}
       />
 
-      {legend ? (
-        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{legend}</p>
-      ) : null}
-
       {err ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
           {err}
@@ -182,8 +179,8 @@ export default function LlmCost() {
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">LLM 成本明细</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               按模型 + 统计日汇总 Token；占比为所选区间内全量 Token 中的份额；点击行可
-              <strong className="font-medium text-gray-700 dark:text-gray-300">下钻</strong>
-              查看输入/输出拆分（Doris otel）
+              <strong className="font-medium text-gray-700 dark:text-gray-300">查看</strong>
+              查看输入/输出拆分
             </p>
           </div>
           <button
@@ -195,7 +192,7 @@ export default function LlmCost() {
             导出 CSV
           </button>
         </div>
-        {loading ? <p className="mt-4 text-sm text-gray-500">加载中…</p> : null}
+        {loading ? <LoadingSpinner message="加载中…" /> : null}
         {rangeValid && totalRows > 0 && !loading ? (
           <TablePagination
             className="mt-6"
@@ -222,7 +219,6 @@ export default function LlmCost() {
                   <SortableTableTh label="Token 消耗" columnKey="tokens" sortKey={sortKey} sortOrder={sortOrder} onSort={handleSort} />
                   <SortableTableTh label="占比" columnKey="share" sortKey={sortKey} sortOrder={sortOrder} onSort={handleSort} />
                   <SortableTableTh label="输入 / 输出" columnKey="inputOut" sortKey={sortKey} sortOrder={sortOrder} onSort={handleSort} />
-                  <th className="w-24 px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -268,9 +264,6 @@ export default function LlmCost() {
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-gray-800 dark:text-gray-200">{row.tokens}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{row.share}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{row.inputOut}</td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <span className="text-xs font-medium text-primary">下钻</span>
-                      </td>
                     </tr>
                   ))
                 )}
@@ -278,7 +271,6 @@ export default function LlmCost() {
             </table>
           </div>
         </div>
-        <p className="mt-4 text-xs text-gray-400 dark:text-gray-500">数据来自 Doris · otel 库（无人民币单价字段）</p>
       </section>
 
       {drillRow && (

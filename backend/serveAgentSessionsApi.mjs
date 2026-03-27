@@ -13,13 +13,14 @@ import {
   queryAgentSessionsLogsRaw,
   queryAgentSessionsRawWithLogTokens,
 } from "./agentSessionsQuery.mjs";
-import { queryAuditDashboardMetrics } from "./auditDashboardQuery.mjs";
-import { queryCostOverviewSnapshot } from "./costOverviewQuery.mjs";
-import { queryAgentCostList, queryLlmCostDetail } from "./agentLlmCostTablesQuery.mjs";
+import { queryAuditDashboardMetrics } from "./security-audit/audit-dashboard-query.mjs";
+import { queryCostOverviewSnapshot } from "./cost-analysis/cost-overview-query.mjs";
+import { queryAgentCostList, queryLlmCostDetail } from "./cost-analysis/agent-llm-cost-tables-query.mjs";
 import {
   listOtelAgentSessionsLogTables,
   queryAgentSessionsLogsSearch,
-} from "./agentSessionsLogsSearchQuery.mjs";
+} from "./log-search/log-search-query.mjs";
+import { queryConfigAuditLogs, queryConfigAuditStats } from "./security-audit/config-audit-query.mjs";
 
 const port = Number(process.env.PORT ?? 8787);
 
@@ -167,11 +168,54 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 配置变更审计日志查询
+  if (url.startsWith("/api/config-audit-logs")) {
+    try {
+      const u = new URL(url, "http://127.0.0.1");
+      const data = await queryConfigAuditLogs({
+        startIso: u.searchParams.get("startIso") ?? undefined,
+        endIso: u.searchParams.get("endIso") ?? undefined,
+        source: u.searchParams.get("source") ?? undefined,
+        event: u.searchParams.get("event") ?? undefined,
+        configPath: u.searchParams.get("configPath") ?? undefined,
+        pid: u.searchParams.get("pid") ? Number(u.searchParams.get("pid")) : undefined,
+        result: u.searchParams.get("result") ?? undefined,
+        suspicious: u.searchParams.get("suspicious") ?? "all",
+        gatewayChange: u.searchParams.get("gatewayChange") ?? undefined,
+        sortKey: u.searchParams.get("sortKey") ?? "event_time",
+        sortDir: u.searchParams.get("sortDir") ?? "desc",
+        limit: Number(u.searchParams.get("limit") ?? "100"),
+        offset: Number(u.searchParams.get("offset") ?? "0"),
+      });
+      sendJson(res, 200, data);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendJson(res, 500, { error: msg });
+    }
+    return;
+  }
+
+  // 配置变更审计统计
+  if (url.startsWith("/api/config-audit-stats")) {
+    try {
+      const u = new URL(url, "http://127.0.0.1");
+      const data = await queryConfigAuditStats({
+        startIso: u.searchParams.get("startIso") ?? undefined,
+        endIso: u.searchParams.get("endIso") ?? undefined,
+      });
+      sendJson(res, 200, data);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendJson(res, 500, { error: msg });
+    }
+    return;
+  }
+
   res.writeHead(404);
   res.end();
 });
 
-server.listen(port, "127.0.0.1", () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/cost-overview`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/agent-cost-list?startDay=&endDay=`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/llm-cost-detail?startDay=&endDay=`);
@@ -179,4 +223,6 @@ server.listen(port, "127.0.0.1", () => {
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/agent-sessions`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/agent-sessions-logs-tables`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/agent-sessions-logs?sessionId=`);
+  console.log(`[agent-sessions] http://127.0.0.1:${port}/api/config-audit-logs`);
+  console.log(`[agent-sessions] http://127.0.0.1:${port}/api/config-audit-stats`);
 });

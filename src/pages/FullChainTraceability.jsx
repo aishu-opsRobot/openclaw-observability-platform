@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import CodeBlock from "../components/CodeBlock.jsx";
 import { TRACE_SESSION_SAMPLES, findTraceSessionByQuery } from "../data/traceSessions.js";
 
 function formatDateTime(iso) {
@@ -202,9 +203,9 @@ export default function FullChainTraceability() {
                           <div className="border-t border-gray-100 bg-white px-4 py-3 text-sm">
                             <p className="leading-relaxed text-gray-700">{step.detail}</p>
                             {step.meta && (
-                              <pre className="mt-3 max-h-40 overflow-auto rounded-md bg-gray-900/90 p-3 font-mono text-[11px] leading-relaxed text-emerald-100/95">
+                              <CodeBlock text={JSON.stringify(step.meta, null, 2)} variant="dark" height="sm" className="mt-3">
                                 {JSON.stringify(step.meta, null, 2)}
-                              </pre>
+                              </CodeBlock>
                             )}
                           </div>
                         )}

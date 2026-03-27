@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import CostTimeRangeFilter, {
   defaultRangeLastDays,
   parseLocalMs,
@@ -166,10 +167,6 @@ export default function AgentCostDetail() {
         onChangeEnd={setRangeEnd}
       />
 
-      {legend ? (
-        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{legend}</p>
-      ) : null}
-
       {err ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
           {err}
@@ -181,8 +178,8 @@ export default function AgentCostDetail() {
           <div>
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Agent 成本列表</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              按 Agent 汇总 Token、单调用均值、调用次数与成功率；点击行可<strong className="font-medium text-gray-700 dark:text-gray-300">下钻</strong>
-              查看输入/输出拆分（Doris otel）
+              按 Agent 汇总 Token、单调用均值、调用次数与成功率；点击行可<strong className="font-medium text-gray-700 dark:text-gray-300">查看</strong>
+              查看输入/输出拆分
             </p>
           </div>
           <button
@@ -194,7 +191,7 @@ export default function AgentCostDetail() {
             导出 CSV
           </button>
         </div>
-        {loading ? <p className="mt-4 text-sm text-gray-500">加载中…</p> : null}
+        {loading ? <LoadingSpinner message="加载中…" /> : null}
         {rangeValid && totalRows > 0 && !loading ? (
           <TablePagination
             className="mt-6"
