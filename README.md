@@ -6,7 +6,7 @@ docker build -t openclaw-observability  .
 docker compose up -d 
 
 或者  
-1.前端后端安装：
+1.前端后端数据库安装：
 docker-compose -f docker-compose-build.yml up -d
 
 2.vector 上传数据
