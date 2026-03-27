@@ -29,8 +29,9 @@ jobs:
       - name: Extract metadata for Docker images
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/openclaw-observability-api
-          images: ghcr.io/${{ github.repository_owner }}/openclaw-observability-web
+          images: |
+            ghcr.io/${{ github.repository_owner }}/openclaw-observability-api
+            ghcr.io/${{ github.repository_owner }}/openclaw-observability-web
 
       - name: Build and push API image
         uses: docker/build-push-action@v6
