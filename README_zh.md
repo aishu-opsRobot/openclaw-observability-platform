@@ -129,6 +129,20 @@ docker compose up -d
 docker compose -f docker-compose-build.yml up -d
 ```
 
+#### Doris 数据持久化
+
+默认情况下，每次重新部署时 Doris 会重新初始化（历史数据会被清除）。如需保留数据：
+
+```bash
+# 使用本地历史数据
+DORIS_USE_LOCAL_DATA=true docker compose -f docker-compose-build.yml up -d
+```
+
+| `DORIS_USE_LOCAL_DATA` | 行为 |
+|------------------------|------|
+| `false`（默认） | 每次部署时清除所有数据并重新初始化 |
+| `true` | 保留并使用 `./doris-data` 中的本地历史数据 |
+
 服务启动后访问：
 
 | 服务 | 地址 |
@@ -197,6 +211,7 @@ vector --config vector.yaml
 | `DORIS_DATABASE` | opsRobot | 数据库名称 |
 | `API_PORT` | 8787 | Backend API 端口 |
 | `FRONTEND_PORT` | 3000 | 前端端口 |
+| `DORIS_USE_LOCAL_DATA` | false | 是否在重新部署时保留 Doris 历史数据。`false` = 重新初始化（默认），`true` = 使用本地数据 |
 
 ---
 
