@@ -106,7 +106,12 @@
                                            └─────────────────┘
 ```
 
-## Quick Start
+## Online Live Demo
+
+Try it out now! Access the live demo at:
+
+- **URL**: http://nw1pe2061132.vicp.fun/
+- **Password**: aishu.cn
 
 ### Prerequisites
 
@@ -128,6 +133,20 @@ docker compose up -d
 # Or use the build compose file
 docker compose -f docker-compose-build.yml up -d
 ```
+
+#### Doris Data Persistence
+
+By default, Doris will be reinitialized on each deployment (historical data will be cleared). To preserve data:
+
+```bash
+# Use local historical data
+DORIS_USE_LOCAL_DATA=true docker compose -f docker-compose-build.yml up -d
+```
+
+| `DORIS_USE_LOCAL_DATA` | Behavior |
+|------------------------|----------|
+| `false` (default) | Clear all data and reinitialize on each deployment |
+| `true` | Preserve and use local historical data from `./doris-data` |
 
 After services start, access:
 
@@ -197,6 +216,7 @@ vector --config vector.yaml
 | `DORIS_DATABASE` | opsRobot | Database name |
 | `API_PORT` | 8787 | Backend API port |
 | `FRONTEND_PORT` | 3000 | Frontend port |
+| `DORIS_USE_LOCAL_DATA` | false | Whether to preserve Doris historical data across redeployments. `false` = reinitialize (default), `true` = use local data |
 
 ---
 
