@@ -36,6 +36,7 @@ export default {
 
   "nav.fullTimeMonitoring": "全天候观测",
   "nav.configChange": "实例配置变更",
+  "nav.monitorDashboard": "大屏监控",
   "nav.riskPerception": "风险感知",
   "nav.auditOverview": "行为审计概览",
   "nav.sessionAudit": "会话链路溯源",
@@ -53,6 +54,8 @@ export default {
   "page.digitalEmployeeList.subtitle": "能力、指标与运行动态",
   "page.monitoring.title": "基础监控",
   "page.monitoring.subtitle": "系统与资源监控",
+  "page.monitorDashboard.title": "大屏监控",
+  "page.monitorDashboard.subtitle": "全局运行状态与大屏概览",
   "page.alerts.title": "告警事件",
   "page.alerts.subtitle": "告警与事件处理",
   "page.audit.title": "行为审计",

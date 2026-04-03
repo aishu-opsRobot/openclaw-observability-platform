@@ -139,7 +139,6 @@ vite.config.js.timestamp-*
 vite.config.js.timestamp-*
 
 # Custom
-.cursor/
 cursor/
 datamodel/
 AGENTS.md

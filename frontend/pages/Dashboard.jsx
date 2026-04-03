@@ -14,6 +14,7 @@ import FullChainTraceability from "./FullChainTraceability.jsx";
 import ConfigChange from "./ConfigChange.jsx";
 import SessionAudit from "./SessionAudit.jsx";
 import AuditOverview from "./AuditOverview.jsx";
+import MonitorDashboard from "./monitor-dashboard/index.jsx";
 
 const PAGE_META_KEYS = {
   panorama: { title: "page.panorama.title", subtitle: "page.panorama.subtitle" },
@@ -25,6 +26,7 @@ const PAGE_META_KEYS = {
   "config-change": { title: "page.configChange.title", subtitle: "page.configChange.subtitle" },
   "audit-overview": { title: "page.auditOverview.title", subtitle: "page.auditOverview.subtitle" },
   "session-audit": { title: "page.sessionAudit.title", subtitle: "page.sessionAudit.subtitle" },
+  "monitor-dashboard": { title: "page.monitorDashboard.title", subtitle: "page.monitorDashboard.subtitle" },
   traceability: { title: "page.traceability.title", subtitle: "page.traceability.subtitle" },
   inspection: { title: "page.inspection.title", subtitle: "page.inspection.subtitle" },
   "cost-overview": { title: "page.costOverview.title", subtitle: "page.costOverview.subtitle" },
@@ -39,6 +41,7 @@ const NAV_KEYS = [
     labelKey: "nav.fullTimeMonitoring",
     icon: "clock",
     children: [
+      { id: "monitor-dashboard", labelKey: "nav.monitorDashboard" },
       { id: "config-change", labelKey: "nav.configChange" },
     ],
   },
@@ -572,7 +575,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className={`flex-1 overflow-y-auto ${activeNav === "monitor-dashboard" ? "flex flex-col" : "p-6"}`}>
           {activeNav === "cost-overview" ? (
             <CostAnalysis />
           ) : activeNav === "cost-overview-2" ? (
@@ -587,6 +590,8 @@ export default function Dashboard() {
             <DigitalEmployeePortrait />
           ) : activeNav === "config-change" ? (
             <ConfigChange />
+          ) : activeNav === "monitor-dashboard" ? (
+            <MonitorDashboard />
           ) : activeNav === "audit-overview" ? (
             <AuditOverview />
           ) : activeNav === "session-audit" ? (

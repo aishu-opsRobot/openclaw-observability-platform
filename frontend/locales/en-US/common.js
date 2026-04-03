@@ -36,6 +36,7 @@ export default {
 
   "nav.fullTimeMonitoring": "24/7 Monitoring",
   "nav.configChange": "Config Changes",
+  "nav.monitorDashboard": "Monitor Dashboard",
   "nav.riskPerception": "Risk Perception",
   "nav.auditOverview": "Audit Overview",
   "nav.sessionAudit": "Session Traceability",
@@ -53,6 +54,8 @@ export default {
   "page.digitalEmployeeList.subtitle": "Capabilities, metrics & activity",
   "page.monitoring.title": "Monitoring",
   "page.monitoring.subtitle": "System & resource monitoring",
+  "page.monitorDashboard.title": "Monitor Dashboard",
+  "page.monitorDashboard.subtitle": "Global runtime status & dashboard overview",
   "page.alerts.title": "Alerts",
   "page.alerts.subtitle": "Alerts & event handling",
   "page.audit.title": "Behavior Audit",
