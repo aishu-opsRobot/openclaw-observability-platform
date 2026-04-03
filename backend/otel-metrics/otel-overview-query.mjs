@@ -24,11 +24,6 @@ function formatDateTimeShort(date) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-function formatDateTimeWithDay(date) {
-  const d = new Date(date);
-  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
 async function getConnection() {
   const cfg = getDorisConfig();
   try {
@@ -129,29 +124,37 @@ ORDER BY total_count DESC
   return Array.isArray(rows) ? rows.map(normalizeRow) : [];
 }
 
-async function querySumTrend(conn, startIso, endIso, granularityMinutes) {
+async function querySumTrend(conn, startIso, endIso) {
   const sql = `
 SELECT
   SUBSTR(CAST(\`timestamp\` AS VARCHAR), 1, 16) AS time_bucket,
   metric_name,
   get_json_string(attributes, '$.openclaw.channel') AS channel,
+  get_json_string(attributes, '$.openclaw.model') AS model,
+  get_json_string(attributes, '$.openclaw.provider') AS provider,
   get_json_string(attributes, '$.openclaw.token') AS token_type,
   get_json_string(attributes, '$.openclaw.state') AS state,
+  get_json_string(attributes, '$.openclaw.reason') AS reason,
+  get_json_string(attributes, '$.openclaw.lane') AS lane,
   SUM(value) AS total_value
 FROM \`opsRobot\`.\`otel_metrics_sum\`
 WHERE timestamp >= ?
   AND timestamp <= ?
 GROUP BY SUBSTR(CAST(\`timestamp\` AS VARCHAR), 1, 16), metric_name,
   get_json_string(attributes, '$.openclaw.channel'),
+  get_json_string(attributes, '$.openclaw.model'),
+  get_json_string(attributes, '$.openclaw.provider'),
   get_json_string(attributes, '$.openclaw.token'),
-  get_json_string(attributes, '$.openclaw.state')
+  get_json_string(attributes, '$.openclaw.state'),
+  get_json_string(attributes, '$.openclaw.reason'),
+  get_json_string(attributes, '$.openclaw.lane')
 ORDER BY time_bucket ASC
 `;
   const [rows] = await conn.query(sql, [startIso, endIso]);
   return Array.isArray(rows) ? rows.map(normalizeRow) : [];
 }
 
-async function queryHistogramTrend(conn, startIso, endIso, granularityMinutes) {
+async function queryHistogramTrend(conn, startIso, endIso) {
   const sql = `
 SELECT
   SUBSTR(CAST(\`timestamp\` AS VARCHAR), 1, 16) AS time_bucket,
@@ -159,7 +162,8 @@ SELECT
   get_json_string(attributes, '$.openclaw.channel') AS channel,
   get_json_string(attributes, '$.openclaw.lane') AS lane,
   SUM(\`count\`) AS total_count,
-  SUM(\`sum\`) AS total_sum
+  SUM(\`sum\`) AS total_sum,
+  MAX(\`max\`) AS max_value
 FROM \`opsRobot\`.\`otel_metrics_histogram\`
 WHERE timestamp >= ?
   AND timestamp <= ?
@@ -172,37 +176,210 @@ ORDER BY time_bucket ASC
   return Array.isArray(rows) ? rows.map(normalizeRow) : [];
 }
 
-function generateTimePoints(startMs, endMs, granularityMinutes) {
-  const points = [];
-  const start = new Date(startMs);
-  const end = new Date(endMs);
-  
-  const current = new Date(start);
-  current.setMinutes(Math.floor(current.getMinutes() / granularityMinutes) * granularityMinutes, 0, 0);
-  
-  while (current <= end) {
-    points.push(formatDateTimeShort(current.getTime()));
-    current.setMinutes(current.getMinutes() + granularityMinutes);
-  }
-  
-  return points;
-}
-
 function formatTokenCount(count) {
   if (count >= 1000000) return (count / 1000000).toFixed(2) + 'M';
   if (count >= 1000) return (count / 1000).toFixed(1) + 'K';
-  return count.toLocaleString();
+  return count?.toLocaleString() || '0';
 }
 
 function formatCost(usd) {
   if (usd >= 1) return "$" + usd.toFixed(2);
   if (usd >= 0.01) return "$" + usd.toFixed(4);
-  return "$" + usd.toFixed(6);
+  return "$" + (usd || 0).toFixed(6);
+}
+
+function buildSessionAnalytics(sumMetrics) {
+  const sessionMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.session.state");
+  
+  const byState = {};
+  const byReason = {};
+  const byChannel = {};
+  const byInstance = {};
+  
+  for (const r of sessionMetrics) {
+    if (r.state) {
+      byState[r.state] = (byState[r.state] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.channel) {
+      byChannel[r.channel] = (byChannel[r.channel] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.service_instance_id) {
+      byInstance[r.service_instance_id] = (byInstance[r.service_instance_id] || 0) + (Number(r.total_value) || 0);
+    }
+  }
+  
+  const stuckMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.session.stuck");
+  for (const r of stuckMetrics) {
+    if (r.reason) {
+      byReason[r.reason] = (byReason[r.reason] || 0) + (Number(r.total_value) || 0);
+    }
+  }
+  
+  return {
+    byState: Object.entries(byState).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byReason: Object.entries(byReason).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byChannel: Object.entries(byChannel).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    topInstances: Object.entries(byInstance).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
+  };
+}
+
+function buildTokenAnalytics(sumMetrics) {
+  const tokenMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.tokens");
+  
+  const byType = {};
+  const byModel = {};
+  const byChannel = {};
+  const byProvider = {};
+  const byInstance = {};
+  
+  for (const r of tokenMetrics) {
+    if (r.token_type) {
+      byType[r.token_type] = (byType[r.token_type] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.model) {
+      byModel[r.model] = (byModel[r.model] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.channel) {
+      byChannel[r.channel] = (byChannel[r.channel] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.provider) {
+      byProvider[r.provider] = (byProvider[r.provider] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.service_instance_id) {
+      byInstance[r.service_instance_id] = (byInstance[r.service_instance_id] || 0) + (Number(r.total_value) || 0);
+    }
+  }
+  
+  return {
+    byType: Object.entries(byType).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byModel: Object.entries(byModel).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byChannel: Object.entries(byChannel).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byProvider: Object.entries(byProvider).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    topInstances: Object.entries(byInstance).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
+  };
+}
+
+function buildCostAnalytics(sumMetrics) {
+  const costMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.cost.usd");
+  
+  const byModel = {};
+  const byChannel = {};
+  const byProvider = {};
+  const byInstance = {};
+  
+  for (const r of costMetrics) {
+    if (r.model) {
+      byModel[r.model] = (byModel[r.model] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.channel) {
+      byChannel[r.channel] = (byChannel[r.channel] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.provider) {
+      byProvider[r.provider] = (byProvider[r.provider] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.service_instance_id) {
+      byInstance[r.service_instance_id] = (byInstance[r.service_instance_id] || 0) + (Number(r.total_value) || 0);
+    }
+  }
+  
+  return {
+    byModel: Object.entries(byModel).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byChannel: Object.entries(byChannel).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byProvider: Object.entries(byProvider).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    topInstances: Object.entries(byInstance).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
+  };
+}
+
+function buildMessageAnalytics(sumMetrics, histMetrics) {
+  const processedMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.message.processed");
+  const queuedMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.message.queued");
+  const durationMetrics = histMetrics.filter(r => r.metric_name === "openclaw.message.duration_ms");
+  
+  const byChannel = {};
+  const byInstance = {};
+  
+  for (const r of processedMetrics) {
+    if (r.channel) {
+      byChannel[r.channel] = (byChannel[r.channel] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.service_instance_id) {
+      byInstance[r.service_instance_id] = (byInstance[r.service_instance_id] || 0) + (Number(r.total_value) || 0);
+    }
+  }
+  
+  let totalDuration = 0;
+  let totalCount = 0;
+  let maxDuration = 0;
+  
+  for (const r of durationMetrics) {
+    totalDuration += Number(r.total_sum) || 0;
+    totalCount += Number(r.total_count) || 0;
+    maxDuration = Math.max(maxDuration, Number(r.max_value) || 0);
+  }
+  
+  return {
+    byChannel: Object.entries(byChannel).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    topInstances: Object.entries(byInstance).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
+    durationStats: {
+      avg: totalCount > 0 ? totalDuration / totalCount : 0,
+      max: maxDuration,
+    },
+  };
+}
+
+function buildQueueAnalytics(sumMetrics, histMetrics) {
+  const enqueueMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.queue.lane.enqueue");
+  const dequeueMetrics = sumMetrics.filter(r => r.metric_name === "openclaw.queue.lane.dequeue");
+  const depthMetrics = histMetrics.filter(r => r.metric_name === "openclaw.queue.depth");
+  const waitMetrics = histMetrics.filter(r => r.metric_name === "openclaw.queue.wait_ms");
+  
+  const byLane = {};
+  const byChannel = {};
+  const byInstance = {};
+  
+  for (const r of enqueueMetrics) {
+    if (r.lane) {
+      byLane[r.lane] = (byLane[r.lane] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.channel) {
+      byChannel[r.channel] = (byChannel[r.channel] || 0) + (Number(r.total_value) || 0);
+    }
+    if (r.service_instance_id) {
+      byInstance[r.service_instance_id] = (byInstance[r.service_instance_id] || 0) + (Number(r.total_value) || 0);
+    }
+  }
+  
+  let totalWait = 0;
+  let totalWaitCount = 0;
+  let maxWait = 0;
+  let maxDepth = 0;
+  
+  for (const r of waitMetrics) {
+    totalWait += Number(r.total_sum) || 0;
+    totalWaitCount += Number(r.total_count) || 0;
+    maxWait = Math.max(maxWait, Number(r.max_value) || 0);
+  }
+  
+  for (const r of depthMetrics) {
+    maxDepth = Math.max(maxDepth, Number(r.max_value) || 0);
+  }
+  
+  return {
+    byLane: Object.entries(byLane).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    byChannel: Object.entries(byChannel).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    topInstances: Object.entries(byInstance).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
+    waitStats: {
+      avg: totalWaitCount > 0 ? totalWait / totalWaitCount : 0,
+      max: maxWait,
+    },
+    depthStats: {
+      max: maxDepth,
+    },
+  };
 }
 
 export async function queryOtelOverviewData(opts = {}) {
   const hours = Number(opts.hours) || 1;
-  const granularityMinutes = Number(opts.granularityMinutes) || 1;
   const { startTime, endTime } = opts;
   
   const now = Date.now();
@@ -220,8 +397,6 @@ export async function queryOtelOverviewData(opts = {}) {
     endIso = formatDateTime(endMs);
   }
   
-  const timePoints = generateTimePoints(startMs, endMs, granularityMinutes);
-  
   const conn = await getConnection();
   
   try {
@@ -235,8 +410,8 @@ export async function queryOtelOverviewData(opts = {}) {
       queryInstanceList(conn),
       querySumMetricsByInstance(conn, startIso, endIso),
       queryHistogramMetricsByInstance(conn, startIso, endIso),
-      querySumTrend(conn, startIso, endIso, granularityMinutes),
-      queryHistogramTrend(conn, startIso, endIso, granularityMinutes),
+      querySumTrend(conn, startIso, endIso),
+      queryHistogramTrend(conn, startIso, endIso),
     ]);
     
     const instanceMap = {};
@@ -323,33 +498,39 @@ export async function queryOtelOverviewData(opts = {}) {
     const trends = {
       session: sumTrend
         .filter(r => r.metric_name === "openclaw.session.state")
-        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value })),
+        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value, state: r.state })),
       token: sumTrend
         .filter(r => r.metric_name === "openclaw.tokens")
-        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value })),
+        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value, token_type: r.token_type, model: r.model })),
       cost: sumTrend
         .filter(r => r.metric_name === "openclaw.cost.usd")
-        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value })),
+        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value, model: r.model })),
       messageProcessed: sumTrend
         .filter(r => r.metric_name === "openclaw.message.processed")
-        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value })),
+        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.total_value, channel: r.channel })),
       queueDepth: histTrend
         .filter(r => r.metric_name === "openclaw.queue.depth")
-        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.max_value || 0 })),
+        .map(r => ({ time: formatDateTimeShort(r.time_bucket), value: r.max_value || 0, lane: r.lane })),
     };
     
     const histogramStats = {
       messageDuration: {
-        avg: histMetrics.find(r => r.metric_name === "openclaw.message.duration_ms")?.total_sum / 
-             histMetrics.find(r => r.metric_name === "openclaw.message.duration_ms")?.total_count || 0,
-        max: histMetrics.find(r => r.metric_name === "openclaw.message.duration_ms")?.max_value || 0,
+        avg: histMetrics.filter(r => r.metric_name === "openclaw.message.duration_ms").reduce((a, r) => a + (Number(r.total_sum) || 0), 0) / 
+             Math.max(1, histMetrics.filter(r => r.metric_name === "openclaw.message.duration_ms").reduce((a, r) => a + (Number(r.total_count) || 0), 0)),
+        max: Math.max(0, ...histMetrics.filter(r => r.metric_name === "openclaw.message.duration_ms").map(r => Number(r.max_value) || 0)),
       },
       queueWait: {
-        avg: histMetrics.find(r => r.metric_name === "openclaw.queue.wait_ms")?.total_sum /
-             histMetrics.find(r => r.metric_name === "openclaw.queue.wait_ms")?.total_count || 0,
-        max: histMetrics.find(r => r.metric_name === "openclaw.queue.wait_ms")?.max_value || 0,
+        avg: histMetrics.filter(r => r.metric_name === "openclaw.queue.wait_ms").reduce((a, r) => a + (Number(r.total_sum) || 0), 0) /
+             Math.max(1, histMetrics.filter(r => r.metric_name === "openclaw.queue.wait_ms").reduce((a, r) => a + (Number(r.total_count) || 0), 0)),
+        max: Math.max(0, ...histMetrics.filter(r => r.metric_name === "openclaw.queue.wait_ms").map(r => Number(r.max_value) || 0)),
       },
     };
+    
+    const sessionAnalytics = buildSessionAnalytics(sumMetrics);
+    const tokenAnalytics = buildTokenAnalytics(sumMetrics);
+    const costAnalytics = buildCostAnalytics(sumMetrics);
+    const messageAnalytics = buildMessageAnalytics(sumMetrics, histMetrics);
+    const queueAnalytics = buildQueueAnalytics(sumMetrics, histMetrics);
     
     return {
       generatedAt: formatDateTime(now),
@@ -369,8 +550,14 @@ export async function queryOtelOverviewData(opts = {}) {
       },
       trends,
       histogramStats,
+      sessionAnalytics,
+      tokenAnalytics,
+      costAnalytics,
+      messageAnalytics,
+      queueAnalytics,
     };
   } finally {
     await conn.end();
   }
 }
+
