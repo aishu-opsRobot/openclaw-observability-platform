@@ -1,39 +1,41 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import intl from "react-intl-universal";
 import Icon from "../components/Icon.jsx";
+import { useLocale } from "../context/LocaleContext.jsx";
 
-const PAGE_TABS = [
-  { key: "overview", label: "总览" },
-  { key: "session", label: "会话统计" },
-  { key: "token", label: "Token消费" },
-  { key: "cost", label: "成本分析" },
-  { key: "message", label: "消息处理" },
-  { key: "queue", label: "队列状态" },
+const PAGE_TAB_KEYS = [
+  { key: "overview", labelKey: "otelOverview.pageTab.overview" },
+  { key: "session", labelKey: "otelOverview.pageTab.session" },
+  { key: "token", labelKey: "otelOverview.pageTab.token" },
+  { key: "cost", labelKey: "otelOverview.pageTab.cost" },
+  { key: "message", labelKey: "otelOverview.pageTab.message" },
+  { key: "queue", labelKey: "otelOverview.pageTab.queue" },
 ];
 
-const INSTANCE_DETAIL_TABS = [
-  { key: "overview", label: "总览" },
-  { key: "session", label: "会话" },
-  { key: "token", label: "Token" },
-  { key: "cost", label: "成本" },
-  { key: "message", label: "消息" },
-  { key: "queue", label: "队列" },
+const INSTANCE_DETAIL_TAB_KEYS = [
+  { key: "overview", labelKey: "otelOverview.detailTab.overview" },
+  { key: "session", labelKey: "otelOverview.detailTab.session" },
+  { key: "token", labelKey: "otelOverview.detailTab.token" },
+  { key: "cost", labelKey: "otelOverview.detailTab.cost" },
+  { key: "message", labelKey: "otelOverview.detailTab.message" },
+  { key: "queue", labelKey: "otelOverview.detailTab.queue" },
 ];
 
-const TIME_RANGES = [
-  { label: "最近1小时", value: "1h", hours: 1, granularityMinutes: 1, granularityLabel: "1分钟" },
-  { label: "最近6小时", value: "6h", hours: 6, granularityMinutes: 5, granularityLabel: "5分钟" },
-  { label: "最近12小时", value: "12h", hours: 12, granularityMinutes: 10, granularityLabel: "10分钟" },
-  { label: "最近24小时", value: "24h", hours: 24, granularityMinutes: 30, granularityLabel: "30分钟" },
-  { label: "最近3天", value: "3d", hours: 72, granularityMinutes: 60, granularityLabel: "1小时" },
-  { label: "最近7天", value: "7d", hours: 168, granularityMinutes: 180, granularityLabel: "3小时" },
+const TIME_RANGE_DEFS = [
+  { value: "1h", hours: 1, granularityMinutes: 1, labelKey: "otelOverview.timeRange.1h", granularityKey: "otelOverview.granularity.1m" },
+  { value: "6h", hours: 6, granularityMinutes: 5, labelKey: "otelOverview.timeRange.6h", granularityKey: "otelOverview.granularity.5m" },
+  { value: "12h", hours: 12, granularityMinutes: 10, labelKey: "otelOverview.timeRange.12h", granularityKey: "otelOverview.granularity.10m" },
+  { value: "24h", hours: 24, granularityMinutes: 30, labelKey: "otelOverview.timeRange.24h", granularityKey: "otelOverview.granularity.30m" },
+  { value: "3d", hours: 72, granularityMinutes: 60, labelKey: "otelOverview.timeRange.3d", granularityKey: "otelOverview.granularity.1h" },
+  { value: "7d", hours: 168, granularityMinutes: 180, labelKey: "otelOverview.timeRange.7d", granularityKey: "otelOverview.granularity.3h" },
 ];
 
-const REFRESH_INTERVALS = [
-  { label: "关闭", value: 0 },
-  { label: "10秒", value: 10 },
-  { label: "30秒", value: 30 },
-  { label: "1分钟", value: 60 },
-  { label: "5分钟", value: 300 },
+const REFRESH_INTERVAL_DEFS = [
+  { value: 0, labelKey: "otelOverview.refresh.off" },
+  { value: 10, labelKey: "otelOverview.refresh.10s" },
+  { value: 30, labelKey: "otelOverview.refresh.30s" },
+  { value: 60, labelKey: "otelOverview.refresh.1m" },
+  { value: 300, labelKey: "otelOverview.refresh.5m" },
 ];
 
 function LineChart({ data, color, height = 120 }) {
@@ -243,14 +245,29 @@ export default function OtelOverview() {
   const [customStartTime, setCustomStartTime] = useState("");
   const [customEndTime, setCustomEndTime] = useState("");
   const [showTimePicker, setShowTimePicker] = useState(false);
-  
+
+  const { locale } = useLocale();
+  const timeRanges = useMemo(
+    () =>
+      TIME_RANGE_DEFS.map((d) => ({
+        ...d,
+        label: intl.get(d.labelKey),
+        granularityLabel: intl.get(d.granularityKey),
+      })),
+    [locale]
+  );
+  const refreshIntervals = useMemo(
+    () => REFRESH_INTERVAL_DEFS.map((d) => ({ ...d, label: intl.get(d.labelKey) })),
+    [locale]
+  );
+
   const refreshIntervalRef = useRef(refreshInterval);
   refreshIntervalRef.current = refreshInterval;
-  
-  const timeRangeConfig = TIME_RANGES.find((r) => r.value === selectedTimeRange);
+
+  const timeRangeConfig = timeRanges.find((r) => r.value === selectedTimeRange);
   const selectedHours = timeRangeConfig?.hours || 1;
   const granularityMinutes = timeRangeConfig?.granularityMinutes || 1;
-  const granularityLabel = timeRangeConfig?.granularityLabel || "1分钟";
+  const granularityLabel = timeRangeConfig?.granularityLabel || intl.get("otelOverview.granularity.1m");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -323,12 +340,18 @@ export default function OtelOverview() {
     return "bg-amber-50 text-amber-700 ring-amber-600/15 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-500/25";
   };
 
+  const formatInstanceStatus = (status) => {
+    if (status === "在线") return intl.get("otelOverview.statusOnline");
+    if (status === "离线") return intl.get("otelOverview.statusOffline");
+    return status || intl.get("otelOverview.na");
+  };
+
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
           <Icon name="loading" className="h-8 w-8 text-primary animate-spin" />
-          <span className="text-gray-500 dark:text-gray-400">加载中...</span>
+          <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.loading")}</span>
         </div>
       </div>
     );
@@ -346,14 +369,14 @@ export default function OtelOverview() {
   }));
 
   const sessionDistribution = [
-    { name: '活跃', value: overview.activeSessions || 0 },
-    { name: '卡顿', value: overview.stuckSessions || 0 },
-    { name: '其他', value: Math.max(0, (overview.totalSessions || 0) - (overview.activeSessions || 0) - (overview.stuckSessions || 0)) },
+    { name: intl.get("otelOverview.sessionActive"), value: overview.activeSessions || 0 },
+    { name: intl.get("otelOverview.sessionStuck"), value: overview.stuckSessions || 0 },
+    { name: intl.get("otelOverview.sessionOther"), value: Math.max(0, (overview.totalSessions || 0) - (overview.activeSessions || 0) - (overview.stuckSessions || 0)) },
   ];
 
   const tokenDistribution = [
-    { name: 'Input', value: instances.reduce((a, i) => a + (parseFloat(i.inputTokens) || 0), 0) },
-    { name: 'Output', value: instances.reduce((a, i) => a + (parseFloat(i.outputTokens) || 0), 0) },
+    { name: intl.get("otelOverview.tokenInput"), value: instances.reduce((a, i) => a + (parseFloat(i.inputTokens) || 0), 0) },
+    { name: intl.get("otelOverview.tokenOutput"), value: instances.reduce((a, i) => a + (parseFloat(i.outputTokens) || 0), 0) },
   ];
 
   const renderOverviewTab = () => (
@@ -365,21 +388,21 @@ export default function OtelOverview() {
               <Icon name="server" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">实例总数</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricTotalInstances")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{overview.totalInstances || 0}</span>
-                <span className="text-xs text-gray-400">个实例</span>
+                <span className="text-xs text-gray-400">{intl.get("otelOverview.metricInstancesUnit")}</span>
               </div>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-              <span className="text-gray-500 dark:text-gray-400">在线 {overview.onlineInstances || 0}</span>
+              <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricOnlineCount", { count: overview.onlineInstances || 0 })}</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-gray-400"></span>
-              <span className="text-gray-500 dark:text-gray-400">离线 {overview.offlineInstances || 0}</span>
+              <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricOfflineCount", { count: overview.offlineInstances || 0 })}</span>
             </span>
           </div>
         </div>
@@ -389,17 +412,17 @@ export default function OtelOverview() {
               <Icon name="users" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">活跃会话</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricActiveSessions")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{overview.activeSessions?.toLocaleString() || 0}</span>
               </div>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-4 text-xs">
-            <span className="text-gray-500 dark:text-gray-400">总会话: {overview.totalSessions?.toLocaleString() || 0}</span>
+            <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricTotalSessionsLine", { count: overview.totalSessions?.toLocaleString() || 0 })}</span>
             <span className="flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-              <span className="text-gray-500 dark:text-gray-400">卡顿: {overview.stuckSessions || 0}</span>
+              <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricStuckCount", { count: overview.stuckSessions || 0 })}</span>
             </span>
           </div>
         </div>
@@ -409,7 +432,7 @@ export default function OtelOverview() {
               <Icon name="zap" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Token消耗</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricTokenConsumption")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{overview.totalTokens?.toLocaleString() || 0}</span>
               </div>
@@ -422,7 +445,7 @@ export default function OtelOverview() {
               <Icon name="dollar" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">总成本</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricTotalCost")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">${(overview.totalCost || 0).toFixed(4)}</span>
               </div>
@@ -438,7 +461,7 @@ export default function OtelOverview() {
               <Icon name="activity" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">消息处理</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricMessageProcessed")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{overview.messageProcessed?.toLocaleString() || 0}</span>
               </div>
@@ -451,7 +474,7 @@ export default function OtelOverview() {
               <Icon name="database" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">排队消息</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricMessageQueued")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{overview.messageQueued?.toLocaleString() || 0}</span>
               </div>
@@ -464,7 +487,7 @@ export default function OtelOverview() {
               <Icon name="clock" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">平均耗时</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricAvgDuration")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{histogramStats.messageDuration?.avg?.toFixed(1) || 0}</span>
                 <span className="text-xs text-gray-400">ms</span>
@@ -478,7 +501,7 @@ export default function OtelOverview() {
               <Icon name="timer" className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-500 dark:text-gray-400">平均等待</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricAvgQueueWait")}</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{histogramStats.queueWait?.avg?.toFixed(1) || 0}</span>
                 <span className="text-xs text-gray-400">ms</span>
@@ -490,41 +513,41 @@ export default function OtelOverview() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">会话趋势</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartSessionTrend")}</h3>
           <LineChart data={trends.session || []} color="#3b82f6" height={120} />
         </div>
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Token消耗趋势</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTokenTrend")}</h3>
           <LineChart data={trends.token || []} color="#8b5cf6" height={120} />
         </div>
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">成本趋势</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartCostTrend")}</h3>
           <LineChart data={trends.cost || []} color="#f43f5e" height={120} />
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">会话状态分布</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartSessionStateDist")}</h3>
           <PieChart data={sessionDistribution} size={100} />
         </div>
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Token类型占比</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTokenTypeShare")}</h3>
           <PieChart data={tokenDistribution} size={100} />
         </div>
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Top 5 实例 (Token消耗)</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTopInstancesToken")}</h3>
           <TopList data={topInstances} valueFormatter={(v) => v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : v >= 1000 ? (v/1000).toFixed(1) + 'K' : v} />
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">消息处理趋势</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartMessageTrend")}</h3>
           <LineChart data={trends.messageProcessed || []} color="#10b981" height={120} />
         </div>
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">队列深度趋势</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartQueueDepthTrend")}</h3>
           <LineChart data={trends.queueDepth || []} color="#f59e0b" height={120} />
         </div>
       </div>
@@ -532,20 +555,20 @@ export default function OtelOverview() {
       <div className="app-card p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">OpenClaw 实例列表</h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">点击行查看实例详情 · 实时状态监控</p>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{intl.get("otelOverview.instanceListTitle")}</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.instanceListHint")}</p>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-500 dark:text-gray-400">共 {instances.length} 个实例</span>
+            <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.instanceTotalCount", { count: instances.length })}</span>
             <span className="text-gray-300 dark:text-gray-600">|</span>
-            <span className="text-emerald-600 dark:text-emerald-400">{instances.filter(i => i.status === "在线").length} 在线</span>
+            <span className="text-emerald-600 dark:text-emerald-400">{intl.get("otelOverview.instanceOnlineCount", { count: instances.filter((i) => i.status === "在线").length })}</span>
           </div>
         </div>
 
         {instances.length === 0 ? (
           <div className="mt-6 flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
             <Icon name="server" className="h-12 w-12 mb-3 opacity-50" />
-            <p>暂无实例数据</p>
+            <p>{intl.get("otelOverview.noInstanceData")}</p>
           </div>
         ) : (
           <div className="mt-6 overflow-hidden rounded-lg border border-gray-100 dark:border-gray-800">
@@ -553,16 +576,16 @@ export default function OtelOverview() {
               <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/90 dark:border-gray-800 dark:bg-gray-800/80">
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">实例ID</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">实例名称</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">状态</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">活跃会话</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">卡顿会话</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">Token消耗</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">总成本</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">消息处理</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">队列深度</th>
-                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">操作</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colInstanceId")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colInstanceName")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colStatus")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colActiveSessions")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colStuckSessions")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colTokenConsumption")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colTotalCost")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colMessageProcessed")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colQueueDepth")}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colActions")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-900/50">
@@ -579,7 +602,7 @@ export default function OtelOverview() {
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{instance.name}</td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className={["inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset", getStatusBadgeClass(instance.status)].join(" ")}>
-                          {instance.status}
+                          {formatInstanceStatus(instance.status)}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{(instance.activeSessions || 0).toLocaleString()}</td>
@@ -602,7 +625,7 @@ export default function OtelOverview() {
                           className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary-soft transition-colors dark:text-primary dark:hover:bg-primary/15"
                         >
                           <Icon name="info" className="h-3.5 w-3.5 mr-1" />
-                          查看详情
+                          {intl.get("otelOverview.viewDetail")}
                         </button>
                       </td>
                     </tr>
@@ -623,19 +646,19 @@ export default function OtelOverview() {
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">会话总数</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.sessionTotal")}</p>
             <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{overview.totalSessions?.toLocaleString() || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">活跃会话</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricActiveSessions")}</p>
             <span className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{overview.activeSessions?.toLocaleString() || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">卡顿会话</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.colStuckSessions")}</p>
             <span className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{overview.stuckSessions || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">成功率</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.sessionSuccessRate")}</p>
             <span className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
               {overview.totalSessions > 0 ? (((overview.totalSessions - overview.stuckSessions) / overview.totalSessions) * 100).toFixed(1) : 100}%
             </span>
@@ -644,22 +667,22 @@ export default function OtelOverview() {
         
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">会话趋势</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartSessionTrend")}</h3>
             <LineChart data={trends.session || []} color="#3b82f6" height={120} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">状态分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartStateDist")}</h3>
             <PieChart data={sessionAnalytics.byState || sessionDistribution} size={100} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">渠道分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartChannelDist")}</h3>
             <PieChart data={sessionAnalytics.byChannel || []} size={100} />
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">卡顿原因分析</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.stuckReasonAnalysis")}</h3>
             {sessionAnalytics.byReason && sessionAnalytics.byReason.length > 0 ? (
               <div className="space-y-3">
                 {sessionAnalytics.byReason.map((item, i) => (
@@ -676,11 +699,11 @@ export default function OtelOverview() {
                 ))}
               </div>
             ) : (
-              <div className="text-center text-gray-500 dark:text-gray-400 py-8">暂无卡顿数据</div>
+              <div className="text-center text-gray-500 dark:text-gray-400 py-8">{intl.get("otelOverview.noStuckData")}</div>
             )}
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Top 5 实例 (会话数)</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTopInstancesSession")}</h3>
             <TopList data={sessionAnalytics.topInstances || []} />
           </div>
         </div>
@@ -695,19 +718,19 @@ export default function OtelOverview() {
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Token总消耗</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.tokenTotalConsumption")}</p>
             <span className="text-2xl font-semibold text-violet-600 dark:text-violet-400">{overview.totalTokens?.toLocaleString() || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Input Token</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.inputToken")}</p>
             <span className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{tokenAnalytics.byType?.find(t => t.name === 'input')?.value?.toLocaleString() || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Output Token</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.outputToken")}</p>
             <span className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{tokenAnalytics.byType?.find(t => t.name === 'output')?.value?.toLocaleString() || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Input/Output比</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.ioRatio")}</p>
             <span className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
               {tokenAnalytics.byType && tokenAnalytics.byType.length >= 2 
                 ? (tokenAnalytics.byType[0].value / Math.max(1, tokenAnalytics.byType[1].value)).toFixed(2) 
@@ -718,32 +741,32 @@ export default function OtelOverview() {
         
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Token消耗趋势</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTokenTrend")}</h3>
             <LineChart data={trends.token || []} color="#8b5cf6" height={120} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Token类型占比</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTokenTypeShare")}</h3>
             <PieChart data={tokenAnalytics.byType || tokenDistribution} size={100} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">渠道分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartChannelDist")}</h3>
             <PieChart data={tokenAnalytics.byChannel || []} size={100} />
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">模型Token消耗分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.modelTokenDist")}</h3>
             <TopList data={tokenAnalytics.byModel || []} valueFormatter={(v) => v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : v >= 1000 ? (v/1000).toFixed(1) + 'K' : v} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">提供商Token消耗分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.providerTokenDist")}</h3>
             <TopList data={tokenAnalytics.byProvider || []} valueFormatter={(v) => v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : v >= 1000 ? (v/1000).toFixed(1) + 'K' : v} />
           </div>
         </div>
         
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Top 5 实例 (Token消耗)</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTopInstancesToken")}</h3>
           <TopList data={tokenAnalytics.topInstances || topInstances} valueFormatter={(v) => v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : v >= 1000 ? (v/1000).toFixed(1) + 'K' : v} />
         </div>
       </div>
@@ -757,51 +780,51 @@ export default function OtelOverview() {
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">总成本</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricTotalCost")}</p>
             <span className="text-2xl font-semibold text-rose-600 dark:text-rose-400">${(overview.totalCost || 0).toFixed(4)}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">平均每小时</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.costAvgPerHour")}</p>
             <span className="text-2xl font-semibold text-amber-600 dark:text-amber-400">${((overview.totalCost || 0) / Math.max(1, selectedHours)).toFixed(4)}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">最高成本模型</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.costTopModel")}</p>
             <span className="text-2xl font-semibold text-violet-600 dark:text-violet-400">{costAnalytics.byModel?.[0]?.name || '-'}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">最高成本渠道</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.costTopChannel")}</p>
             <span className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{costAnalytics.byChannel?.[0]?.name || '-'}</span>
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">成本趋势</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartCostTrend")}</h3>
             <LineChart data={trends.cost || []} color="#f43f5e" height={120} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">模型成本占比</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartModelCostShare")}</h3>
             <PieChart data={costAnalytics.byModel || []} size={100} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">渠道成本占比</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartChannelCostShare")}</h3>
             <PieChart data={costAnalytics.byChannel || []} size={100} />
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">模型成本排名</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.rankModelCost")}</h3>
             <TopList data={costAnalytics.byModel || []} valueFormatter={(v) => '$' + v.toFixed(4)} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">提供商成本排名</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.rankProviderCost")}</h3>
             <TopList data={costAnalytics.byProvider || []} valueFormatter={(v) => '$' + v.toFixed(4)} />
           </div>
         </div>
         
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Top 5 实例 (成本)</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTopInstancesCost")}</h3>
           <TopList data={costAnalytics.topInstances || []} valueFormatter={(v) => '$' + v.toFixed(4)} />
         </div>
       </div>
@@ -815,49 +838,49 @@ export default function OtelOverview() {
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">已处理消息</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.msgProcessed")}</p>
             <span className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{overview.messageProcessed?.toLocaleString() || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">排队消息</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.msgQueued")}</p>
             <span className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{overview.messageQueued?.toLocaleString() || 0}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">平均耗时</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricAvgDuration")}</p>
             <span className="text-2xl font-semibold text-cyan-600 dark:text-cyan-400">{(messageAnalytics.durationStats?.avg || histogramStats.messageDuration?.avg || 0).toFixed(1)}ms</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">最大耗时</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricMaxDuration")}</p>
             <span className="text-2xl font-semibold text-rose-600 dark:text-rose-400">{messageAnalytics.durationStats?.max || histogramStats.messageDuration?.max || 0}ms</span>
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">消息处理趋势</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartMessageTrend")}</h3>
             <LineChart data={trends.messageProcessed || []} color="#10b981" height={120} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">渠道分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartChannelDist")}</h3>
             <PieChart data={messageAnalytics.byChannel || []} size={100} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">耗时分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartDurationDist")}</h3>
             <div className="space-y-4">
               <div className="p-4 bg-cyan-50/50 dark:bg-cyan-950/30 rounded-lg text-center">
                 <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{(messageAnalytics.durationStats?.avg || 0).toFixed(1)}ms</div>
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">平均耗时</div>
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("otelOverview.avgDurationLabel")}</div>
               </div>
               <div className="p-4 bg-rose-50/50 dark:bg-rose-950/30 rounded-lg text-center">
                 <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">{messageAnalytics.durationStats?.max || 0}ms</div>
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">最大耗时</div>
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("otelOverview.maxDurationLabel")}</div>
               </div>
             </div>
           </div>
         </div>
         
         <div className="app-card p-5">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Top 5 实例 (消息处理)</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTopInstancesMessage")}</h3>
           <TopList data={messageAnalytics.topInstances || []} />
         </div>
       </div>
@@ -871,68 +894,68 @@ export default function OtelOverview() {
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">当前队列深度</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.queueDepthCurrent")}</p>
             <span className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{queueAnalytics.depthStats?.max || instances.reduce((a, i) => a + (i.queueDepth || 0), 0)}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">入队总数</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.enqueueTotal")}</p>
             <span className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{instances.reduce((a, i) => a + (i.enqueueTotal || 0), 0).toLocaleString()}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">出队总数</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.dequeueTotal")}</p>
             <span className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{instances.reduce((a, i) => a + (i.dequeueTotal || 0), 0).toLocaleString()}</span>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm text-gray-500 dark:text-gray-400">平均等待</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.avgWait")}</p>
             <span className="text-2xl font-semibold text-violet-600 dark:text-violet-400">{(queueAnalytics.waitStats?.avg || histogramStats.queueWait?.avg || 0).toFixed(1)}ms</span>
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">队列深度趋势</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartQueueDepthTrend")}</h3>
             <LineChart data={trends.queueDepth || []} color="#f59e0b" height={120} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">通道分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartLaneDist")}</h3>
             <PieChart data={queueAnalytics.byLane || []} size={100} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">渠道分布</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartChannelDist")}</h3>
             <PieChart data={queueAnalytics.byChannel || []} size={100} />
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">通道入队排名</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.rankLaneEnqueue")}</h3>
             <TopList data={queueAnalytics.byLane || []} />
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Top 5 实例 (入队数)</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.chartTopInstancesEnqueue")}</h3>
             <TopList data={queueAnalytics.topInstances || []} />
           </div>
         </div>
         
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">等待时间统计</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.waitTimeStats")}</h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="p-4 bg-violet-50/50 dark:bg-violet-950/30 rounded-lg text-center">
                 <div className="text-2xl font-bold text-violet-600 dark:text-violet-400">{(queueAnalytics.waitStats?.avg || 0).toFixed(1)}ms</div>
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">平均等待</div>
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("otelOverview.avgWaitLabel")}</div>
               </div>
               <div className="p-4 bg-rose-50/50 dark:bg-rose-950/30 rounded-lg text-center">
                 <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">{queueAnalytics.waitStats?.max || 0}ms</div>
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">最大等待</div>
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("otelOverview.maxWaitLabel")}</div>
               </div>
             </div>
           </div>
           <div className="app-card p-5">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">队列深度统计</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("otelOverview.queueDepthStats")}</h3>
             <div className="p-4 bg-amber-50/50 dark:bg-amber-950/30 rounded-lg text-center">
               <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{queueAnalytics.depthStats?.max || 0}</div>
-              <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">最大队列深度</div>
+              <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("otelOverview.maxQueueDepth")}</div>
             </div>
           </div>
         </div>
@@ -950,11 +973,11 @@ export default function OtelOverview() {
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-gray-700/60">
             <div className="flex items-center gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">实例详情</h2>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{intl.get("otelOverview.modalInstanceDetail")}</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{selectedInstance.name}</p>
               </div>
               <span className={["inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset", getStatusBadgeClass(selectedInstance.status)].join(" ")}>
-                {selectedInstance.status}
+                {formatInstanceStatus(selectedInstance.status)}
               </span>
             </div>
             <button
@@ -968,34 +991,34 @@ export default function OtelOverview() {
 
           <div className="max-h-[75vh] overflow-y-auto">
             <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-800/30">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">基本信息</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.sectionBasicInfo")}</h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "实例ID", value: selectedInstance.id },
-                  { label: "主机名", value: selectedInstance.hostName },
-                  { label: "运行时", value: selectedInstance.runtime },
-                  { label: "最后活跃", value: selectedInstance.lastActive },
+                  { labelKey: "otelOverview.labelInstanceId", value: selectedInstance.id },
+                  { labelKey: "otelOverview.labelHostName", value: selectedInstance.hostName },
+                  { labelKey: "otelOverview.labelRuntime", value: selectedInstance.runtime },
+                  { labelKey: "otelOverview.labelLastActive", value: selectedInstance.lastActive },
                 ].map((item) => (
-                  <div key={item.label} className="flex flex-col">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
-                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.value || "N/A"}</span>
+                  <div key={item.labelKey} className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.value || intl.get("otelOverview.na")}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-700/60">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">总览指标</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.sectionOverviewMetrics")}</h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {[
-                  { label: "活跃会话", value: (selectedInstance.activeSessions || 0).toLocaleString(), color: "text-blue-600 dark:text-blue-400" },
-                  { label: "卡顿会话", value: selectedInstance.stuckSessions || 0, color: selectedInstance.stuckSessions > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-600 dark:text-gray-400" },
-                  { label: "Token消耗", value: selectedInstance.tokenConsumption || "0", color: "text-violet-600 dark:text-violet-400" },
-                  { label: "总成本", value: selectedInstance.totalCost || "$0", color: "text-rose-600 dark:text-rose-400" },
-                  { label: "队列深度", value: selectedInstance.queueDepth || 0, color: "text-amber-600 dark:text-amber-400" },
+                  { labelKey: "otelOverview.metricActiveSessions", value: (selectedInstance.activeSessions || 0).toLocaleString(), color: "text-blue-600 dark:text-blue-400" },
+                  { labelKey: "otelOverview.colStuckSessions", value: selectedInstance.stuckSessions || 0, color: selectedInstance.stuckSessions > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-600 dark:text-gray-400" },
+                  { labelKey: "otelOverview.metricTokenConsumption", value: selectedInstance.tokenConsumption || "0", color: "text-violet-600 dark:text-violet-400" },
+                  { labelKey: "otelOverview.metricTotalCost", value: selectedInstance.totalCost || "$0", color: "text-rose-600 dark:text-rose-400" },
+                  { labelKey: "otelOverview.colQueueDepth", value: selectedInstance.queueDepth || 0, color: "text-amber-600 dark:text-amber-400" },
                 ].map((item) => (
-                  <div key={item.label} className="p-3 bg-white dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/60">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                  <div key={item.labelKey} className="p-3 bg-white dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/60">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                     <div className="mt-1">
                       <span className={["text-lg font-semibold", item.color].join(" ")}>{item.value}</span>
                     </div>
@@ -1006,7 +1029,7 @@ export default function OtelOverview() {
 
             <div className="border-b border-gray-100 dark:border-gray-700/60">
               <nav className="flex px-6 gap-1">
-                {INSTANCE_DETAIL_TABS.map((tab) => (
+                {INSTANCE_DETAIL_TAB_KEYS.map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
@@ -1018,7 +1041,7 @@ export default function OtelOverview() {
                         : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                     ].join(" ")}
                   >
-                    {tab.label}
+                    {intl.get(tab.labelKey)}
                   </button>
                 ))}
               </nav>
@@ -1028,7 +1051,7 @@ export default function OtelOverview() {
               {detailTab === "overview" && (
                 <div className="space-y-6">
                   <div className="app-card p-4">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">核心指标趋势</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.detailCoreTrend")}</h4>
                     <LineChart data={trends.session || []} color="#8b5cf6" height={120} />
                   </div>
                 </div>
@@ -1037,19 +1060,19 @@ export default function OtelOverview() {
                 <div className="space-y-6">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {[
-                      { label: "会话总数", value: (selectedInstance.sessionTotal || 0).toLocaleString() },
-                      { label: "活跃会话", value: (selectedInstance.activeSessions || 0).toLocaleString() },
-                      { label: "卡顿会话", value: selectedInstance.stuckSessions || 0 },
-                      { label: "成功率", value: selectedInstance.sessionTotal > 0 ? ((selectedInstance.sessionTotal - selectedInstance.stuckSessions) / selectedInstance.sessionTotal * 100).toFixed(1) + "%" : "100%" },
+                      { labelKey: "otelOverview.sessionTotal", value: (selectedInstance.sessionTotal || 0).toLocaleString() },
+                      { labelKey: "otelOverview.metricActiveSessions", value: (selectedInstance.activeSessions || 0).toLocaleString() },
+                      { labelKey: "otelOverview.colStuckSessions", value: selectedInstance.stuckSessions || 0 },
+                      { labelKey: "otelOverview.sessionSuccessRate", value: selectedInstance.sessionTotal > 0 ? ((selectedInstance.sessionTotal - selectedInstance.stuckSessions) / selectedInstance.sessionTotal * 100).toFixed(1) + "%" : "100%" },
                     ].map((item) => (
-                      <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                      <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                         <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">{item.value}</div>
                       </div>
                     ))}
                   </div>
                   <div className="app-card p-4">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">会话状态趋势</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.detailSessionTrend")}</h4>
                     <LineChart data={trends.session || []} color="#3b82f6" height={100} />
                   </div>
                 </div>
@@ -1058,19 +1081,19 @@ export default function OtelOverview() {
                 <div className="space-y-6">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {[
-                      { label: "Token总消耗", value: selectedInstance.tokenConsumption || "0" },
-                      { label: "Input Token", value: selectedInstance.inputTokens || "0" },
-                      { label: "Output Token", value: selectedInstance.outputTokens || "0" },
-                      { label: "队列深度", value: selectedInstance.queueDepth || 0 },
+                      { labelKey: "otelOverview.tokenTotalConsumption", value: selectedInstance.tokenConsumption || "0" },
+                      { labelKey: "otelOverview.inputToken", value: selectedInstance.inputTokens || "0" },
+                      { labelKey: "otelOverview.outputToken", value: selectedInstance.outputTokens || "0" },
+                      { labelKey: "otelOverview.colQueueDepth", value: selectedInstance.queueDepth || 0 },
                     ].map((item) => (
-                      <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                      <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                         <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">{item.value}</div>
                       </div>
                     ))}
                   </div>
                   <div className="app-card p-4">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Token消耗趋势</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.detailTokenTrend")}</h4>
                     <LineChart data={trends.token || []} color="#8b5cf6" height={100} />
                   </div>
                 </div>
@@ -1079,19 +1102,19 @@ export default function OtelOverview() {
                 <div className="space-y-6">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {[
-                      { label: "今日成本", value: selectedInstance.totalCost || "$0" },
-                      { label: "每小时成本", value: overview.costStats?.hourlyRate || "$0" },
-                      { label: "单Token成本", value: overview.costStats?.perToken || "$0" },
-                      { label: "模型", value: distributions.costModel?.[0]?.name || "N/A" },
+                      { labelKey: "otelOverview.labelCostToday", value: selectedInstance.totalCost || "$0" },
+                      { labelKey: "otelOverview.labelCostPerHour", value: overview.costStats?.hourlyRate || "$0" },
+                      { labelKey: "otelOverview.labelCostPerToken", value: overview.costStats?.perToken || "$0" },
+                      { labelKey: "otelOverview.labelModel", value: distributions.costModel?.[0]?.name || intl.get("otelOverview.na") },
                     ].map((item) => (
-                      <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                      <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                         <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">{item.value}</div>
                       </div>
                     ))}
                   </div>
                   <div className="app-card p-4">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">成本趋势</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.detailCostTrend")}</h4>
                     <LineChart data={trends.cost || []} color="#f43f5e" height={100} />
                   </div>
                 </div>
@@ -1100,19 +1123,19 @@ export default function OtelOverview() {
                 <div className="space-y-6">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {[
-                      { label: "已处理消息", value: (selectedInstance.messageProcessed || 0).toLocaleString() },
-                      { label: "排队消息", value: (selectedInstance.messageQueued || 0).toLocaleString() },
-                      { label: "平均耗时", value: `${histogramStats.messageDuration?.avg || 0}ms` },
-                      { label: "最大耗时", value: `${histogramStats.messageDuration?.max || 0}ms` },
+                      { labelKey: "otelOverview.msgProcessed", value: (selectedInstance.messageProcessed || 0).toLocaleString() },
+                      { labelKey: "otelOverview.msgQueued", value: (selectedInstance.messageQueued || 0).toLocaleString() },
+                      { labelKey: "otelOverview.metricAvgDuration", value: `${histogramStats.messageDuration?.avg || 0}ms` },
+                      { labelKey: "otelOverview.metricMaxDuration", value: `${histogramStats.messageDuration?.max || 0}ms` },
                     ].map((item) => (
-                      <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                      <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                         <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">{item.value}</div>
                       </div>
                     ))}
                   </div>
                   <div className="app-card p-4">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">消息处理趋势</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.detailMessageTrend")}</h4>
                     <LineChart data={trends.messageProcessed || []} color="#10b981" height={100} />
                   </div>
                 </div>
@@ -1121,19 +1144,19 @@ export default function OtelOverview() {
                 <div className="space-y-6">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {[
-                      { label: "当前队列深度", value: selectedInstance.queueDepth || 0 },
-                      { label: "入队总数", value: (selectedInstance.enqueueTotal || 0).toLocaleString() },
-                      { label: "出队总数", value: (selectedInstance.dequeueTotal || 0).toLocaleString() },
-                      { label: "平均等待", value: `${histogramStats.queueWait?.avg || 0}ms` },
+                      { labelKey: "otelOverview.queueDepthCurrent", value: selectedInstance.queueDepth || 0 },
+                      { labelKey: "otelOverview.enqueueTotal", value: (selectedInstance.enqueueTotal || 0).toLocaleString() },
+                      { labelKey: "otelOverview.dequeueTotal", value: (selectedInstance.dequeueTotal || 0).toLocaleString() },
+                      { labelKey: "otelOverview.avgWait", value: `${histogramStats.queueWait?.avg || 0}ms` },
                     ].map((item) => (
-                      <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                      <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                         <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">{item.value}</div>
                       </div>
                     ))}
                   </div>
                   <div className="app-card p-4">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">队列深度趋势</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.detailQueueTrend")}</h4>
                     <LineChart data={trends.queueDepth || []} color="#f59e0b" height={100} />
                   </div>
                 </div>
@@ -1147,7 +1170,7 @@ export default function OtelOverview() {
               onClick={() => { setSelectedInstance(null); setDetailTab("overview"); }}
               className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
             >
-              关闭
+              {intl.get("otelOverview.modalClose")}
             </button>
           </div>
         </div>
@@ -1162,127 +1185,135 @@ export default function OtelOverview() {
           <div className="flex items-start gap-3">
             <Icon name="alert" className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">数据加载失败</h3>
+              <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">{intl.get("otelOverview.loadErrorTitle")}</h3>
               <p className="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
               <button
                 type="button"
                 onClick={handleManualRefresh}
                 className="mt-2 text-sm font-medium text-red-700 hover:text-red-800 dark:text-red-300 dark:hover:text-red-200 underline"
               >
-                点击重试
+                {intl.get("otelOverview.clickRetry")}
               </button>
             </div>
           </div>
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {TIME_RANGES.slice(0, 6).map((range) => (
-                <button
-                  key={range.value}
-                  type="button"
-                  onClick={() => handleQuickTimeSelect(range.value)}
-                  className={[
-                    "px-3 py-1.5 text-sm font-medium transition-colors",
-                    timeMode === "quick" && selectedTimeRange === range.value
-                      ? "bg-primary text-white"
-                      : "bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-                  ].join(" ")}
-                >
-                  {range.label}
-                </button>
-              ))}
-            </div>
-            <div className="relative">
+      <div className="app-card flex flex-col gap-4 px-4 py-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{intl.get("otelOverview.headerObserveTime")}</span>
+          <div className="flex gap-1.5">
+            {timeRanges.slice(0, 6).map((range) => (
               <button
+                key={range.value}
                 type="button"
-                onClick={() => setShowTimePicker(!showTimePicker)}
+                onClick={() => handleQuickTimeSelect(range.value)}
                 className={[
-                  "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium border transition-colors",
-                  timeMode === "custom"
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800"
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                  timeMode === "quick" && selectedTimeRange === range.value
+                    ? "bg-primary/10 text-primary ring-1 ring-inset ring-primary/20"
+                    : "bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
                 ].join(" ")}
               >
-                <Icon name="calendar" className="h-4 w-4" />
-                {timeMode === "custom" ? "自定义时间" : "精确时间"}
+                {range.label}
               </button>
-              {showTimePicker && (
-                <div className="absolute right-0 top-full mt-2 z-50 w-80 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg">
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">开始时间</label>
-                      <input
-                        type="datetime-local"
-                        value={customStartTime}
-                        onChange={(e) => setCustomStartTime(e.target.value)}
-                        className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">结束时间</label>
-                      <input
-                        type="datetime-local"
-                        value={customEndTime}
-                        onChange={(e) => setCustomEndTime(e.target.value)}
-                        className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowTimePicker(false)}
-                        className="flex-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg dark:text-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700"
-                      >
-                        取消
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleApplyCustomTime}
-                        disabled={!customStartTime || !customEndTime}
-                        className="flex-1 px-3 py-1.5 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        应用
-                      </button>
-                    </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-1 items-center justify-end gap-6">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get("otelOverview.granularityWithValue", { label: granularityLabel })}</span>
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowTimePicker(!showTimePicker)}
+              className={[
+                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                timeMode === "custom"
+                  ? "bg-primary/10 text-primary ring-1 ring-inset ring-primary/20"
+                  : "bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
+              ].join(" ")}
+            >
+              <Icon name="calendar" className="h-3.5 w-3.5" />
+              {timeMode === "custom" ? intl.get("otelOverview.customTime") : intl.get("otelOverview.preciseTime")}
+            </button>
+            {showTimePicker && (
+              <div className="absolute right-0 top-full mt-2 z-50 w-80 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{intl.get("timeFilter.startTime")}</label>
+                    <input
+                      type="datetime-local"
+                      value={customStartTime}
+                      onChange={(e) => setCustomStartTime(e.target.value)}
+                      className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{intl.get("timeFilter.endTime")}</label>
+                    <input
+                      type="datetime-local"
+                      value={customEndTime}
+                      onChange={(e) => setCustomEndTime(e.target.value)}
+                      className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowTimePicker(false)}
+                      className="flex-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg dark:text-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700"
+                    >
+                      {intl.get("otelOverview.cancel")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyCustomTime}
+                      disabled={!customStartTime || !customEndTime}
+                      className="flex-1 px-3 py-1.5 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {intl.get("otelOverview.apply")}
+                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-            <span className="text-xs text-gray-500 dark:text-gray-400">粒度: {granularityLabel}</span>
+              </div>
+            )}
           </div>
-          <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <span>自动刷新:</span>
+
+          <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <span>{intl.get("otelOverview.autoRefresh")}</span>
             <select
               value={refreshInterval}
               onChange={(e) => setRefreshInterval(Number(e.target.value))}
-              className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              {REFRESH_INTERVALS.map((interval) => (
+              {refreshIntervals.map((interval) => (
                 <option key={interval.value} value={interval.value}>{interval.label}</option>
               ))}
             </select>
             {refreshInterval > 0 && (
-              <span className="text-xs text-gray-400 dark:text-gray-500">({countdown}秒后刷新)</span>
+              <span className="text-gray-400 dark:text-gray-500 min-w-[36px]">({countdown}s)</span>
             )}
           </div>
+
           <button
             type="button"
             onClick={handleManualRefresh}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
           >
-            <Icon name="refresh" className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
-            手动刷新
+            <Icon name="refresh" className={["h-3.5 w-3.5", loading ? "animate-spin" : ""].join(" ")} />
+            {intl.get("otelOverview.manualRefresh")}
           </button>
         </div>
       </div>
 
       <div className="border-b border-gray-100 dark:border-gray-700/60">
         <nav className="flex gap-1">
-          {PAGE_TABS.map((tab) => (
+          {PAGE_TAB_KEYS.map((tab) => (
             <button
               key={tab.key}
               type="button"
@@ -1294,7 +1325,7 @@ export default function OtelOverview() {
                   : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
               ].join(" ")}
             >
-              {tab.label}
+              {intl.get(tab.labelKey)}
             </button>
           ))}
         </nav>

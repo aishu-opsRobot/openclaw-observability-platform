@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import intl from "react-intl-universal";
 import Icon from "../components/Icon.jsx";
 
 function formatValue(val) {
@@ -56,6 +57,12 @@ export default function InstanceMonitoring() {
     return "bg-amber-50 text-amber-700 ring-amber-600/15 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-500/25";
   };
 
+  const formatInstanceStatus = (status) => {
+    if (status === "在线") return intl.get("otelOverview.statusOnline");
+    if (status === "离线") return intl.get("otelOverview.statusOffline");
+    return status || intl.get("otelOverview.na");
+  };
+
   const overview = data?.overview || {};
   const instances = data?.instances || [];
   const histogramStats = data?.histogramStats || {};
@@ -85,7 +92,7 @@ export default function InstanceMonitoring() {
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">{selectedInstance.id}</p>
               </div>
               <span className={["inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ml-2", getStatusBadgeClass(selectedInstance.status)].join(" ")}>
-                {selectedInstance.status}
+                {formatInstanceStatus(selectedInstance.status)}
               </span>
             </div>
             <button
@@ -99,33 +106,33 @@ export default function InstanceMonitoring() {
 
           <div className="max-h-[75vh] overflow-y-auto">
             <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-800/30">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">基本信息</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("otelOverview.sectionBasicInfo")}</h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "实例ID", value: selectedInstance.id },
-                  { label: "主机名", value: selectedInstance.hostName },
-                  { label: "运行时", value: selectedInstance.runtime },
-                  { label: "最后活跃", value: selectedInstance.lastActive },
+                  { labelKey: "otelOverview.labelInstanceId", value: selectedInstance.id },
+                  { labelKey: "otelOverview.labelHostName", value: selectedInstance.hostName },
+                  { labelKey: "otelOverview.labelRuntime", value: selectedInstance.runtime },
+                  { labelKey: "otelOverview.labelLastActive", value: selectedInstance.lastActive },
                 ].map((item) => (
-                  <div key={item.label} className="flex flex-col">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
-                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.value || "N/A"}</span>
+                  <div key={item.labelKey} className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.value || intl.get("otelOverview.na")}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-700/60">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">会话指标</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("instanceMonitoring.sectionSessionMetrics")}</h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "会话总数", value: formatValue(selectedInstance.sessionTotal), color: "text-gray-800 dark:text-gray-200" },
-                  { label: "活跃会话", value: formatValue(selectedInstance.activeSessions), color: "text-blue-600 dark:text-blue-400" },
-                  { label: "卡顿会话", value: selectedInstance.stuckSessions || 0, color: selectedInstance.stuckSessions > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-600 dark:text-gray-400" },
-                  { label: "成功率", value: selectedInstance.sessionTotal > 0 ? ((selectedInstance.sessionTotal - selectedInstance.stuckSessions) / selectedInstance.sessionTotal * 100).toFixed(1) + "%" : "100%", color: "text-emerald-600 dark:text-emerald-400" },
+                  { labelKey: "otelOverview.sessionTotal", value: formatValue(selectedInstance.sessionTotal), color: "text-gray-800 dark:text-gray-200" },
+                  { labelKey: "otelOverview.metricActiveSessions", value: formatValue(selectedInstance.activeSessions), color: "text-blue-600 dark:text-blue-400" },
+                  { labelKey: "otelOverview.colStuckSessions", value: selectedInstance.stuckSessions || 0, color: selectedInstance.stuckSessions > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-600 dark:text-gray-400" },
+                  { labelKey: "otelOverview.sessionSuccessRate", value: selectedInstance.sessionTotal > 0 ? ((selectedInstance.sessionTotal - selectedInstance.stuckSessions) / selectedInstance.sessionTotal * 100).toFixed(1) + "%" : "100%", color: "text-emerald-600 dark:text-emerald-400" },
                 ].map((item) => (
-                  <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                  <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                     <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">
                       <span className={item.color}>{item.value}</span>
                     </div>
@@ -135,16 +142,16 @@ export default function InstanceMonitoring() {
             </div>
 
             <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-700/60">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Token指标</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("instanceMonitoring.sectionTokenMetrics")}</h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "Token总消耗", value: selectedInstance.tokenConsumption || "0", color: "text-violet-600 dark:text-violet-400" },
-                  { label: "Input Token", value: selectedInstance.inputTokens || "0", color: "text-blue-600 dark:text-blue-400" },
-                  { label: "Output Token", value: selectedInstance.outputTokens || "0", color: "text-emerald-600 dark:text-emerald-400" },
-                  { label: "总成本", value: selectedInstance.totalCost || "$0", color: "text-rose-600 dark:text-rose-400" },
+                  { labelKey: "otelOverview.tokenTotalConsumption", value: selectedInstance.tokenConsumption || "0", color: "text-violet-600 dark:text-violet-400" },
+                  { labelKey: "otelOverview.inputToken", value: selectedInstance.inputTokens || "0", color: "text-blue-600 dark:text-blue-400" },
+                  { labelKey: "otelOverview.outputToken", value: selectedInstance.outputTokens || "0", color: "text-emerald-600 dark:text-emerald-400" },
+                  { labelKey: "otelOverview.metricTotalCost", value: selectedInstance.totalCost || "$0", color: "text-rose-600 dark:text-rose-400" },
                 ].map((item) => (
-                  <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                  <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                     <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">
                       <span className={item.color}>{item.value}</span>
                     </div>
@@ -154,16 +161,16 @@ export default function InstanceMonitoring() {
             </div>
 
             <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-700/60">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">消息处理</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("instanceMonitoring.sectionMessageProcessing")}</h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "已处理消息", value: formatValue(selectedInstance.messageProcessed), color: "text-emerald-600 dark:text-emerald-400" },
-                  { label: "排队消息", value: formatValue(selectedInstance.messageQueued), color: "text-amber-600 dark:text-amber-400" },
-                  { label: "平均耗时", value: `${histogramStats.messageDuration?.avg || 0}ms`, color: "text-blue-600 dark:text-blue-400" },
-                  { label: "最大耗时", value: `${histogramStats.messageDuration?.max || 0}ms`, color: "text-rose-600 dark:text-rose-400" },
+                  { labelKey: "otelOverview.msgProcessed", value: formatValue(selectedInstance.messageProcessed), color: "text-emerald-600 dark:text-emerald-400" },
+                  { labelKey: "otelOverview.msgQueued", value: formatValue(selectedInstance.messageQueued), color: "text-amber-600 dark:text-amber-400" },
+                  { labelKey: "otelOverview.metricAvgDuration", value: `${histogramStats.messageDuration?.avg || 0}ms`, color: "text-blue-600 dark:text-blue-400" },
+                  { labelKey: "otelOverview.metricMaxDuration", value: `${histogramStats.messageDuration?.max || 0}ms`, color: "text-rose-600 dark:text-rose-400" },
                 ].map((item) => (
-                  <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                  <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                     <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">
                       <span className={item.color}>{item.value}</span>
                     </div>
@@ -173,16 +180,16 @@ export default function InstanceMonitoring() {
             </div>
 
             <div className="px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">队列状态</h3>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{intl.get("instanceMonitoring.sectionQueueStatus")}</h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "当前队列深度", value: selectedInstance.queueDepth || 0, color: "text-amber-600 dark:text-amber-400" },
-                  { label: "入队总数", value: formatValue(selectedInstance.enqueueTotal), color: "text-blue-600 dark:text-blue-400" },
-                  { label: "出队总数", value: formatValue(selectedInstance.dequeueTotal), color: "text-emerald-600 dark:text-emerald-400" },
-                  { label: "平均等待", value: `${histogramStats.queueWait?.avg || 0}ms`, color: "text-violet-600 dark:text-violet-400" },
+                  { labelKey: "otelOverview.queueDepthCurrent", value: selectedInstance.queueDepth || 0, color: "text-amber-600 dark:text-amber-400" },
+                  { labelKey: "otelOverview.enqueueTotal", value: formatValue(selectedInstance.enqueueTotal), color: "text-blue-600 dark:text-blue-400" },
+                  { labelKey: "otelOverview.dequeueTotal", value: formatValue(selectedInstance.dequeueTotal), color: "text-emerald-600 dark:text-emerald-400" },
+                  { labelKey: "otelOverview.avgWait", value: `${histogramStats.queueWait?.avg || 0}ms`, color: "text-violet-600 dark:text-violet-400" },
                 ].map((item) => (
-                  <div key={item.label} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{item.label}</span>
+                  <div key={item.labelKey} className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-lg">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{intl.get(item.labelKey)}</span>
                     <div className="mt-2 text-xl font-semibold text-gray-800 dark:text-gray-200">
                       <span className={item.color}>{item.value}</span>
                     </div>
@@ -198,7 +205,7 @@ export default function InstanceMonitoring() {
               onClick={() => setSelectedInstance(null)}
               className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
             >
-              关闭
+              {intl.get("otelOverview.modalClose")}
             </button>
           </div>
         </div>
@@ -210,12 +217,11 @@ export default function InstanceMonitoring() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">实例监控</h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">多实例维度观测 · 实时状态监控 · 数据范围: 最近24小时</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{intl.get("instanceMonitoring.subtitle")}</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-500 dark:text-gray-400">
-            最后更新: {formatDateTime(data?.generatedAt)}
+            {intl.get("instanceMonitoring.lastUpdated", { time: formatDateTime(data?.generatedAt) })}
           </span>
           <button
             type="button"
@@ -224,7 +230,7 @@ export default function InstanceMonitoring() {
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
             <Icon name="refresh" className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
-            刷新
+            {intl.get("instanceMonitoring.refresh")}
           </button>
         </div>
       </div>
@@ -234,14 +240,14 @@ export default function InstanceMonitoring() {
           <div className="flex items-start gap-3">
             <Icon name="alert" className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div>
-              <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">数据加载失败</h3>
+              <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">{intl.get("otelOverview.loadErrorTitle")}</h3>
               <p className="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
               <button
                 type="button"
                 onClick={fetchData}
                 className="mt-2 text-sm font-medium text-red-700 hover:text-red-800 dark:text-red-300 dark:hover:text-red-200 underline"
               >
-                重试
+                {intl.get("instanceMonitoring.retry")}
               </button>
             </div>
           </div>
@@ -252,7 +258,7 @@ export default function InstanceMonitoring() {
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-3">
             <Icon name="loading" className="h-8 w-8 text-primary animate-spin" />
-            <span className="text-gray-500 dark:text-gray-400">加载中...</span>
+            <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.loading")}</span>
           </div>
         </div>
       ) : (
@@ -264,21 +270,21 @@ export default function InstanceMonitoring() {
                   <Icon name="server" className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">实例总数</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricTotalInstances")}</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalInstances}</span>
-                    <span className="text-xs text-gray-400">个实例</span>
+                    <span className="text-xs text-gray-400">{intl.get("otelOverview.metricInstancesUnit")}</span>
                   </div>
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-4 text-xs">
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  <span className="text-gray-500 dark:text-gray-400">在线 {onlineInstances}</span>
+                  <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricOnlineCount", { count: onlineInstances })}</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-gray-400"></span>
-                  <span className="text-gray-500 dark:text-gray-400">离线 {offlineInstances}</span>
+                  <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.metricOfflineCount", { count: offlineInstances })}</span>
                 </span>
               </div>
             </div>
@@ -289,10 +295,10 @@ export default function InstanceMonitoring() {
                   <Icon name="users" className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">总会话数</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("instanceMonitoring.metricTotalSessions")}</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalActiveSessions.toLocaleString()}</span>
-                    <span className="text-xs text-gray-400">活跃</span>
+                    <span className="text-xs text-gray-400">{intl.get("instanceMonitoring.labelActive")}</span>
                   </div>
                 </div>
               </div>
@@ -304,10 +310,10 @@ export default function InstanceMonitoring() {
                   <Icon name="activity" className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">消息处理总量</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("instanceMonitoring.metricMessagesTotal")}</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalMessageProcessed.toLocaleString()}</span>
-                    <span className="text-xs text-gray-400">条</span>
+                    <span className="text-xs text-gray-400">{intl.get("instanceMonitoring.unitMessages")}</span>
                   </div>
                 </div>
               </div>
@@ -319,10 +325,10 @@ export default function InstanceMonitoring() {
                   <Icon name="database" className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">队列总深度</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{intl.get("instanceMonitoring.metricQueueDepthTotal")}</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalQueueDepth}</span>
-                    <span className="text-xs text-gray-400">待处理</span>
+                    <span className="text-xs text-gray-400">{intl.get("instanceMonitoring.labelPending")}</span>
                   </div>
                 </div>
               </div>
@@ -331,25 +337,25 @@ export default function InstanceMonitoring() {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 app-card p-5">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">实例状态分布</h3>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("instanceMonitoring.chartInstanceStatusDist")}</h3>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-lg text-center">
                   <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{onlineInstances}</div>
-                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">在线实例</div>
+                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("instanceMonitoring.onlineInstances")}</div>
                   <div className="mt-2 h-2 bg-emerald-200 dark:bg-emerald-800 rounded-full overflow-hidden">
                     <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${totalInstances > 0 ? (onlineInstances / totalInstances) * 100 : 0}%` }}></div>
                   </div>
                 </div>
                 <div className="p-4 bg-amber-50/50 dark:bg-amber-950/30 rounded-lg text-center">
                   <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">{totalStuckSessions}</div>
-                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">卡顿会话</div>
+                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("instanceMonitoring.stuckSessions")}</div>
                   <div className="mt-2 h-2 bg-amber-200 dark:bg-amber-800 rounded-full overflow-hidden">
                     <div className="h-full bg-amber-500 rounded-full" style={{ width: `${totalActiveSessions > 0 ? Math.min((totalStuckSessions / totalActiveSessions) * 100, 100) : 0}%` }}></div>
                   </div>
                 </div>
                 <div className="p-4 bg-gray-50/50 dark:bg-gray-800/30 rounded-lg text-center">
                   <div className="text-3xl font-bold text-gray-600 dark:text-gray-400">{offlineInstances}</div>
-                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">离线实例</div>
+                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{intl.get("instanceMonitoring.offlineInstances")}</div>
                   <div className="mt-2 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div className="h-full bg-gray-400 rounded-full" style={{ width: `${totalInstances > 0 ? (offlineInstances / totalInstances) * 100 : 0}%` }}></div>
                   </div>
@@ -358,11 +364,11 @@ export default function InstanceMonitoring() {
             </div>
 
             <div className="app-card p-5">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">实例健康度</h3>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{intl.get("instanceMonitoring.instanceHealth")}</h3>
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-500 dark:text-gray-400">整体健康度</span>
+                    <span className="text-gray-500 dark:text-gray-400">{intl.get("instanceMonitoring.overallHealth")}</span>
                     <span className="font-medium text-emerald-600 dark:text-emerald-400">{totalInstances > 0 ? ((onlineInstances / totalInstances) * 100).toFixed(1) : 0}%</span>
                   </div>
                   <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
@@ -371,7 +377,7 @@ export default function InstanceMonitoring() {
                 </div>
                 <div>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-500 dark:text-gray-400">会话成功率</span>
+                    <span className="text-gray-500 dark:text-gray-400">{intl.get("instanceMonitoring.sessionSuccessRate")}</span>
                     <span className="font-medium text-emerald-600 dark:text-emerald-400">
                       {totalActiveSessions > 0 ? (((totalActiveSessions - totalStuckSessions) / totalActiveSessions) * 100).toFixed(1) : 100}%
                     </span>
@@ -387,20 +393,20 @@ export default function InstanceMonitoring() {
           <div className="app-card p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">OpenClaw 实例列表</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">点击行查看实例详情 · 实时状态监控</p>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{intl.get("otelOverview.instanceListTitle")}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{intl.get("otelOverview.instanceListHint")}</p>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-500 dark:text-gray-400">共 {totalInstances} 个实例</span>
+                <span className="text-gray-500 dark:text-gray-400">{intl.get("otelOverview.instanceTotalCount", { count: totalInstances })}</span>
                 <span className="text-gray-300 dark:text-gray-600">|</span>
-                <span className="text-emerald-600 dark:text-emerald-400">{onlineInstances} 在线</span>
+                <span className="text-emerald-600 dark:text-emerald-400">{intl.get("otelOverview.instanceOnlineCount", { count: onlineInstances })}</span>
               </div>
             </div>
 
             {instances.length === 0 ? (
               <div className="mt-6 flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
                 <Icon name="server" className="h-12 w-12 mb-3 opacity-50" />
-                <p>暂无实例数据</p>
+                <p>{intl.get("otelOverview.noInstanceData")}</p>
               </div>
             ) : (
               <div className="mt-6 overflow-hidden rounded-lg border border-gray-100 dark:border-gray-800">
@@ -408,16 +414,16 @@ export default function InstanceMonitoring() {
                   <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50/90 dark:border-gray-800 dark:bg-gray-800/80">
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">实例ID</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">实例名称</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">状态</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">活跃会话</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">卡顿会话</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">Token消耗</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">总成本</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">消息处理</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">队列深度</th>
-                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">操作</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colInstanceId")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colInstanceName")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colStatus")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colActiveSessions")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colStuckSessions")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colTokenConsumption")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colTotalCost")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colMessageProcessed")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colQueueDepth")}</th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">{intl.get("otelOverview.colActions")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-900/50">
@@ -434,7 +440,7 @@ export default function InstanceMonitoring() {
                           <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{instance.name}</td>
                           <td className="whitespace-nowrap px-4 py-3">
                             <span className={["inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset", getStatusBadgeClass(instance.status)].join(" ")}>
-                              {instance.status}
+                              {formatInstanceStatus(instance.status)}
                             </span>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{(instance.activeSessions || 0).toLocaleString()}</td>
@@ -457,7 +463,7 @@ export default function InstanceMonitoring() {
                               className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary-soft transition-colors dark:text-primary dark:hover:bg-primary/15"
                             >
                               <Icon name="info" className="h-3.5 w-3.5 mr-1" />
-                              查看详情
+                              {intl.get("otelOverview.viewDetail")}
                             </button>
                           </td>
                         </tr>

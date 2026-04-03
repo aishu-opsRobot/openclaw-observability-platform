@@ -44,6 +44,9 @@ export default {
   "nav.costOverview2": "Session Cost Detail",
   "nav.agentCostDetail": "Agent Cost Detail",
   "nav.llmCost": "Model Cost Detail",
+  "nav.gatewayMonitoring": "Gateway monitoring",
+  "nav.otelOverview": "Overview",
+  "nav.instanceMonitoring": "Instance monitoring",
 
   "page.panorama.title": "Overview",
   "page.panorama.subtitle": "Key metrics & orders at a glance · Real-time",
