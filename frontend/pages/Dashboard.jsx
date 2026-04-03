@@ -33,6 +33,8 @@ const PAGE_META_KEYS = {
   "cost-overview-2": { title: "page.costOverview2.title", subtitle: "page.costOverview2.subtitle" },
   "agent-cost-detail": { title: "page.agentCostDetail.title", subtitle: "page.agentCostDetail.subtitle" },
   "llm-cost": { title: "page.llmCost.title", subtitle: "page.llmCost.subtitle" },
+  "otel-overview": { title: "page.otelOverview.title", subtitle: "page.otelOverview.subtitle" },
+  "instance-monitoring": { title: "page.instanceMonitoring.title", subtitle: "page.instanceMonitoring.subtitle" },
 };
 
 const NAV_KEYS = [

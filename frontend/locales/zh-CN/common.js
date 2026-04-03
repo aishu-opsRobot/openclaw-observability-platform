@@ -78,6 +78,11 @@ export default {
   "page.agentCostDetail.subtitle": "总消耗、单任务均值、调用量与成功率",
   "page.llmCost.title": "模型成本明细",
   "page.llmCost.subtitle": "按模型维度的 Token 与费用",
+  "page.otelOverview.title": "Gateway 概览",
+  "page.otelOverview.subtitle": "OpenTelemetry 指标与运行态势",
+  "page.instanceMonitoring.title": "实例监控",
+  "page.instanceMonitoring.subtitle": "实例运行状态与健康度",
+  "page.instanceMonitoring.placeholder": "此处可接入实例列表、指标与告警。当前为占位内容。",
 
   "theme.light": "浅色",
   "theme.dark": "深色",

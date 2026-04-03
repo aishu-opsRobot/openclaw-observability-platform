@@ -75,6 +75,11 @@ export default {
   "page.agentCostDetail.subtitle": "Total consumption, per-task average, call volume & success rate",
   "page.llmCost.title": "Model Cost Detail",
   "page.llmCost.subtitle": "Token & cost by model dimension",
+  "page.otelOverview.title": "Gateway Overview",
+  "page.otelOverview.subtitle": "OpenTelemetry metrics & runtime posture",
+  "page.instanceMonitoring.title": "Instance Monitoring",
+  "page.instanceMonitoring.subtitle": "Instance health & runtime status",
+  "page.instanceMonitoring.placeholder": "Connect instance list, metrics, and alerts here. Placeholder content for now.",
 
   "theme.light": "Light",
   "theme.dark": "Dark",
