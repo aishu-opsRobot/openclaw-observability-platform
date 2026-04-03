@@ -1,7 +1,10 @@
 import mysql from 'mysql2/promise';
 async function main() {
   const conn = await mysql.createConnection({
-    host: '127.0.0.1', port: 9030, user: 'root', password: '',
+    host: process.env.DORIS_HOST || '127.0.0.1',
+    port: process.env.DORIS_PORT || 9030,
+    user: process.env.DORIS_USER || 'root',
+    password: process.env.DORIS_PASSWORD || '',
     connectTimeout: 10000
   });
 

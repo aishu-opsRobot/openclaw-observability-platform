@@ -31,13 +31,17 @@ function formatDateTimeWithDay(date) {
 
 async function getConnection() {
   const cfg = getDorisConfig();
-  return mysql.createConnection({
-    host: cfg.host,
-    port: cfg.port,
-    user: cfg.user,
-    password: cfg.password,
-    connectTimeout: 30000,
-  });
+  try {
+    return await mysql.createConnection({
+      host: cfg.host,
+      port: cfg.port,
+      user: cfg.user,
+      password: cfg.password,
+      connectTimeout: 30000,
+    });
+  } catch (error) {
+    throw new Error(`数据库连接失败: ${error.message}`);
+  }
 }
 
 async function queryInstanceList(conn) {
