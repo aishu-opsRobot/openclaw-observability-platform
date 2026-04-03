@@ -1,0 +1,454 @@
+
+<!DOCTYPE HTML>
+<html lang="" >
+    <head>
+        <meta charset="UTF-8">
+        <title>Introduction · HonKit</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="description" content="">
+        <meta name="generator" content="HonKit 6.1.7">
+        
+        
+        
+    
+    <link rel="stylesheet" href="gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="gitbook/@honkit/honkit-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="gitbook/@honkit/honkit-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="getting-started/quick-start.html" />
+    
+    
+
+    </head>
+    <body>
+        
+<div class="book honkit-cloak">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="Type to search" />
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        
+    
+        <li class="chapter active" data-level="1.1" data-path="./">
+            
+                <a href="./">
+            
+                    
+                    Introduction
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">🚀 Getting Started</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="getting-started/quick-start.html">
+            
+                <a href="getting-started/quick-start.html">
+            
+                    
+                    Quick Start
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="getting-started/deployment.html">
+            
+                <a href="getting-started/deployment.html">
+            
+                    
+                    Deployment & Data Pipeline
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">🧩 Core Features</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="features/audit-dashboard.html">
+            
+                <a href="features/audit-dashboard.html">
+            
+                    
+                    Audit Overview
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="features/session-tracing.html">
+            
+                <a href="features/session-tracing.html">
+            
+                    
+                    Session Tracing
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="features/config-audit.html">
+            
+                <a href="features/config-audit.html">
+            
+                    
+                    Config Audit
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.4" data-path="features/cost-analysis.html">
+            
+                <a href="features/cost-analysis.html">
+            
+                    
+                    Cost Analysis
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">🏗️ Advanced Architecture</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="architecture/data-pipeline.html">
+            
+                <a href="architecture/data-pipeline.html">
+            
+                    
+                    OTel & eBPF Pipeline
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">💻 Development</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="development/local-setup.html">
+            
+                <a href="development/local-setup.html">
+            
+                    
+                    Local Setup
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://github.com/honkit/honkit" target="blank" class="gitbook-link">
+            Published with HonKit
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href="." >Introduction</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h1 id="openclaw-observability-platform-文档指南">OpenClaw Observability Platform 文档指南</h1>
+<p>🎉 欢迎阅读 <strong>OpenClaw Observability Platform (OpenClaw 可观测性平台)</strong> 的官方官方文档！</p>
+<p>OpenClaw 是一款专门针对 AI Agent（智能体）与数字化员工工作流设计的开源可观测性平台。基于现代化的技术栈（React + Vite + ECharts + Apache Doris + Vector），它为错综复杂的 LLM (大语言模型) 调用与真实执行流提供<strong>一站式立体追踪、监控与审计</strong>能力。</p>
+<hr></hr>
+<h2 id="🎯-我们的使命与核心价值">🎯 我们的使命与核心价值</h2>
+<p>在真正的企业落地实践中，大语言模型带来的不确定性和“黑盒”问题严重阻碍了自动化流程。OpenClaw 的愿景是帮助开发与 IT 安全团队看清数字员工运行的每一处细节，兼顾效率与安全。</p>
+<p>本平台提供以下三大核心支柱能力：</p>
+<ol>
+<li><p><strong>🔍 全链路无死角会话追踪 (Trace)</strong></p>
+<ul>
+<li><strong>白盒化执行流</strong>：精准记录每次 prompt 的下发、模型推理和回复过程。</li>
+<li><strong>工具连线追踪</strong>：完整绘制 <code>用户输入 -&gt; 意图识别 -&gt; 工具调用 -&gt; 环境读写</code> 拓扑图，避免迷失在堆栈里。</li>
+<li><strong>Token 消耗穿透</strong>：洞悉单次交互中 Input、Output 以及 Cache 的热度分配，为性能调优提供事实依据。</li>
+</ul>
+</li>
+<li><p><strong>🛡️ 智能合规审计体系 (Risk Perception)</strong></p>
+<ul>
+<li><strong>越限阻断感知</strong>：实时高亮并拦截执行了高危工具（例如敏感 Bash 或网络操作）の行为记录。</li>
+<li><strong>动态风险评估</strong>：将海量机器对话自动打标并划定“高、中、低”的潜在风险与错误级别，便于日常审阅。</li>
+<li><strong>配置防污染审计</strong>：记录主机及业务级别配置被 Agent 覆盖篡改的前后对比与动作来源。</li>
+</ul>
+</li>
+<li><p><strong>💰 颗粒度极高的成本归集 (Cost Analysis)</strong></p>
+<ul>
+<li><strong>多维度账单分流</strong>：随时查看近期的平台开销状况，并按通道（Channel）、项目或特定调用者分解 USD 开支。</li>
+<li><strong>价值模型分析</strong>：抓出“循环无效调用”的黑户及浪费点，优化模型的实际投资回报（ROI）。</li>
+</ul>
+</li>
+</ol>
+<hr></hr>
+<h2 id="📖-文档导航">📖 文档导航</h2>
+<p>我们为您准备了从入门到精通的各阶段材料。请根据您的角色与需求选择阅读内容：</p>
+<h3 id="🚀-快速起步系列">🚀 快速起步系列</h3>
+<p>帮助您在短时间内完成本地拉起和系统接入。</p>
+<ul>
+<li><strong><a href="getting-started/quick-start.html">👉 快速入门篇</a></strong>：包含前置要求解读、单机拉起分析前端组件、在几步内看到效果的全流程。</li>
+<li><strong><a href="getting-started/deployment.html">👉 部署与数据接入拓扑</a></strong>：讲述如何在多环境安装使用 <code>Vector</code> 以及流式导入海量日志。</li>
+</ul>
+<h3 id="🧩-核心功能大观">🧩 核心功能大观</h3>
+<p>深入了解控制面板上的数据逻辑和场景。</p>
+<ul>
+<li><strong><a href="features/audit-dashboard.html">👉 审计概览看板</a></strong>：全局监控数字员工的活跃规律和安全态势。</li>
+<li><strong><a href="features/session-tracing.html">👉 会话与流水线审计</a></strong>：通过拓扑图深度追踪一次复杂对话的前因后果。</li>
+<li><strong><a href="features/config-audit.html">👉 特权变更审计</a></strong>：观测环境漂移，追踪系统内敏感文件覆盖溯源。</li>
+<li><strong><a href="features/cost-analysis.html">👉 成本评估与分析</a></strong>：如何查看不同模型、不同通道带来的费用情况及其拆解。</li>
+</ul>
+<h3 id="🏗️-架构探秘">🏗️ 架构探秘</h3>
+<p>满足开发极客的好奇心，分析数据管道内幕。</p>
+<ul>
+<li><strong><a href="architecture/data-pipeline.html">👉 OTel &amp; eBPF 数据流水线</a></strong>：从架构视角看日志数据抓取引擎设计如何保持轻量。</li>
+</ul>
+<h3 id="💻-开发者贡献指引">💻 开发者贡献指引</h3>
+<p>准备向 OpenClaw Observability Platform 发起您的第一个 PR 吗？</p>
+<ul>
+<li><strong><a href="development/local-setup.html">👉 开发指南与环境构建</a></strong>：前后端调试要求，环境变量详解与数据库测试指南。</li>
+</ul>
+<hr></hr>
+<blockquote>
+<p>GitHub 官方仓库: <a href="https://github.com/aishu-opsRobot/openclaw-observability-platform" target="_blank">https://github.com/aishu-opsRobot/openclaw-observability-platform</a></p>
+</blockquote>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class='search-results-count'></span> results matching "<span class='search-query'></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">No results matching "<span class='search-query'></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                
+                <a href="getting-started/quick-start.html" class="navigation navigation-next navigation-unique" aria-label="Next page: Quick Start">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Introduction","level":"1.1","depth":1,"next":{"title":"Quick Start","level":"2.1","depth":1,"path":"getting-started/quick-start.md","ref":"getting-started/quick-start.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":[],"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"}},"file":{"path":"README.md","mtime":"2026-04-01T03:23:23.011Z","type":"markdown"},"gitbook":{"version":"6.1.7","time":"2026-04-03T02:08:23.733Z"},"basePath":".","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <noscript>
+        <style>
+            .honkit-cloak {
+                display: block !important;
+            }
+        </style>
+    </noscript>
+    <script>
+        // Restore sidebar state as critical path for prevent layout shift
+        function __init__getSidebarState(defaultValue){
+            var baseKey = "";
+            var key = baseKey + ":sidebar";
+            try {
+                var value = localStorage[key];
+                if (value === undefined) {
+                    return defaultValue;
+                }
+                var parsed = JSON.parse(value);
+                return parsed == null ? defaultValue : parsed;
+            } catch (e) {
+                return defaultValue;
+            }
+        }
+        function __init__restoreLastSidebarState() {
+            var isMobile = window.matchMedia("(max-width: 600px)").matches;
+            if (isMobile) {
+                // Init last state if not mobile
+                return;
+            }
+            var sidebarState = __init__getSidebarState(true);
+            var book = document.querySelector(".book");
+            // Show sidebar if it enabled
+            if (sidebarState && book) {
+                book.classList.add("without-animation", "with-summary");
+            }
+        }
+
+        try {
+            __init__restoreLastSidebarState();
+        } finally {
+            var book = document.querySelector(".book");
+            book.classList.remove("honkit-cloak");
+        }
+    </script>
+    <script src="gitbook/gitbook.js"></script>
+    <script src="gitbook/theme.js"></script>
+    
+        
+        <script src="gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="gitbook/@honkit/honkit-plugin-fontsettings/fontsettings.js"></script>
+        
+    
+
+    </body>
+</html>
+
