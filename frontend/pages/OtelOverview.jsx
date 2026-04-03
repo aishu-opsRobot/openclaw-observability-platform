@@ -1176,7 +1176,6 @@ export default function OtelOverview() {
         </div>
       )}
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">OpenClaw 监控概览</h2>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">

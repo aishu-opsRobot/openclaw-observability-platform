@@ -39,20 +39,14 @@ const PAGE_META_KEYS = {
 
 const NAV_KEYS = [
   {
-    id: "gateway-monitoring",
-    labelKey: "nav.gatewayMonitoring",
-    icon: "monitoring",
-    children: [
-      { id: "otel-overview", labelKey: "nav.otelOverview" },
-      { id: "instance-monitoring", labelKey: "nav.instanceMonitoring" },
-    ],
-  },
-  {
     id: "full-time-monitoring",
     labelKey: "nav.fullTimeMonitoring",
     icon: "clock",
     children: [
+      { id: "otel-overview", labelKey: "nav.otelOverview" },
+      { id: "instance-monitoring", labelKey: "nav.instanceMonitoring" },
       { id: "config-change", labelKey: "nav.configChange" },
+
     ],
   },
   {
