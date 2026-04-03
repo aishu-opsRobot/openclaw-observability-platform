@@ -106,7 +106,12 @@
                                            └─────────────────┘
 ```
 
-## Quick Start
+## Online Live Demo
+
+Try it out now! Access the live demo at:
+
+- **URL**: http://nw1pe2061132.vicp.fun/
+- **Password**: aishu.cn
 
 ### Prerequisites
 
@@ -129,6 +134,28 @@ docker compose up -d
 docker compose -f docker-compose-build.yml up -d
 ```
 
+#### Doris Data Persistence
+
+To ensure data persistence, Doris data is stored in `~/var/doris_data` by default. If this directory doesn't exist, create it:
+
+```bash
+mkdir -p ~/var/doris_data
+```
+
+To change the data directory path, modify the `volumes > doris_data` configuration in `docker-compose-build.yml`.
+
+By default, Doris will be reinitialized on each deployment (historical data will be cleared). To preserve data:
+
+```bash
+# Use local historical data
+DORIS_USE_LOCAL_DATA=true docker compose -f docker-compose-build.yml up -d
+```
+
+| `DORIS_USE_LOCAL_DATA` | Behavior |
+|------------------------|----------|
+| `false` (default) | Clear all data and reinitialize on each deployment |
+| `true` | Preserve and use local historical data from `./doris-data` |
+
 After services start, access:
 
 | Service | URL |
@@ -150,6 +177,8 @@ npm run dev
 ```
 
 ### Vector Configuration
+
+Vector acts as the log collector for OpenClaw. It needs to be installed and configured on each machine running OpenClaw. The OpenClaw Observability Platform supports multiple Vector collectors to aggregate log data from multiple OpenClaw instances.
 
 Modify the data source paths in `vector.yaml` to point to your actual OpenClaw log directory:
 
@@ -197,6 +226,7 @@ vector --config vector.yaml
 | `DORIS_DATABASE` | opsRobot | Database name |
 | `API_PORT` | 8787 | Backend API port |
 | `FRONTEND_PORT` | 3000 | Frontend port |
+| `DORIS_USE_LOCAL_DATA` | false | Whether to preserve Doris historical data across redeployments. `false` = reinitialize (default), `true` = use local data |
 
 ---
 
@@ -210,6 +240,18 @@ This project closely follows the development of the OpenClaw community. It has b
 | Linux Kernel | 4.18+ | Minimum kernel requirement for eBPF probes |
 | Docker | 20.10.0+ | Recommended container runtime environment |
 | Docker Compose | v2.0.0+ | Recommended for local fast orchestration |
+
+---
+
+## Community
+
+We welcome and encourage contributions in any form! Whether submitting bug reports, improving documentation, or submitting PRs for core code, all contributions are greatly appreciated.
+
+- **Contributing Guide**: Please read our [CONTRIBUTING.md](./CONTRIBUTING.md) to learn how to get started.
+- **WeChat Community**: Scan the QR code below to join the WeChat community for discussions:
+
+![WeChat QR Code](./wechat-qr.png)
+
 
 ---
 
