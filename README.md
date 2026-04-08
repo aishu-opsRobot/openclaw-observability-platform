@@ -88,8 +88,8 @@ Try it out now!
 ### 2. Clone the Project
 
 ```bash
-git clone https://github.com/opsrobot-observability/openclaw-observability-platform.git
-cd openclaw-observability-platform
+git clone https://github.com/opsrobot-ai/opsrobot.git
+cd opsrobot
 ```
 
 ### 3. Deploy Backend Services with Images

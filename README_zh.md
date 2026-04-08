@@ -88,8 +88,8 @@
 ### 2.克隆项目
 
 ```bash
-git clone https://github.com/opsrobot-observability/openclaw-observability-platform.git
-cd openclaw-observability-platform
+https://github.com/opsrobot-ai/opsrobot.git
+cd opsrobot
 ```
 
 ### 3.基于镜像部署后台服务
