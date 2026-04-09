@@ -10,7 +10,7 @@ sources:
     command: 
       - "sh"
       - "-c"
-      - 'for f in home/linux/.openclaw/agents/*/sessions/sessions.json; do if [ -f "$$f" ]; then tr -d "\n" < "$$f"; echo ""; fi; done'
+      - 'for f in /Users/lxg/.openclaw/agents/*/sessions/sessions.json; do if [ -f "$$f" ]; then tr -d "\n" < "$$f"; echo ""; fi; done'
     mode: scheduled
     scheduled:
       exec_interval_secs: 60
@@ -19,7 +19,7 @@ sources:
   session_logs:
     type: file
     include:
-    - "home/linux/.openclaw/agents/*/sessions/*.jsonl" #修改为实际的 openclaw  session 日志路径
+    - "/Users/lxg/.openclaw/agents/*/sessions/*.jsonl" #修改为实际的 openclaw  session 日志路径
     read_from: beginning
     fingerprint:
       strategy: device_and_inode
@@ -28,8 +28,8 @@ sources:
   gateway_logs:
     type: file
     include:
-    - "home/linux/.openclaw/logs/gateway.log"
-    - "home/linux/.openclaw/logs/gateway.err.log"
+    - "/Users/lxg/.openclaw/logs/gateway.log"
+    - "/Users/lxg/.openclaw/logs/gateway.err.log"
     read_from: beginning
     fingerprint:
       strategy: device_and_inode
@@ -38,7 +38,7 @@ sources:
   audit_logs:
     type: file
     include:
-    - "home/linux/.openclaw/logs/config-audit.jsonl"
+    - "/Users/lxg/.openclaw/logs/config-audit.jsonl"
     read_from: beginning
     fingerprint:
       strategy: device_and_inode
@@ -49,7 +49,7 @@ sources:
     command:
     - "sh"
     - "-c"
-    - 'f="/home/linux/.openclaw/openclaw.json"; if [ -f "$$f" ]; then j=$$(tr -d "\n" < "$$f"); printf "{\"source_path\":\"%s\",\"openclaw_root\":%s}\n" "$$f" "$$j"; fi'
+    - 'f="/Users/lxg/.openclaw/openclaw.json"; if [ -f "$$f" ]; then j=$$(tr -d "\n" < "$$f"); printf "{\"source_path\":\"%s\",\"openclaw_root\":%s}\n" "$$f" "$$j"; fi'
     mode: scheduled
     scheduled:
       exec_interval_secs: 60
@@ -60,7 +60,7 @@ sources:
     command:
     - "sh"
     - "-c"
-    - 'for f in /home/linux/.openclaw/agents/*/agent/models.json; do if [ -f "$$f" ]; then agent=$$(basename "$$(dirname "$$(dirname "$$f")")"); [ -z "$$agent" ] && continue; j=$$(tr -d "\n" < "$$f"); printf "{\"source_path\":\"%s\",\"agent_name\":\"%s\",\"models_root\":%s}\n" "$$f" "$$agent" "$$j"; fi; done'
+    - 'for f in /Users/lxg/.openclaw/agents/*/agent/models.json; do if [ -f "$$f" ]; then agent=$$(basename "$$(dirname "$$(dirname "$$f")")"); [ -z "$$agent" ] && continue; j=$$(tr -d "\n" < "$$f"); printf "{\"source_path\":\"%s\",\"agent_name\":\"%s\",\"models_root\":%s}\n" "$$f" "$$agent" "$$j"; fi; done'
     mode: scheduled
     scheduled:
       exec_interval_secs: 60
