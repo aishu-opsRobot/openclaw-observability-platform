@@ -4,13 +4,19 @@ import centerTopBg from "../images/centertopbg1.png";
 export default function MonitorCenterPanorama({ kpis, loading }) {
   const agentTotal = Number(kpis?.agentTotal) || 0;
   const userTotal = Number(kpis?.userTotal) || 0;
-  const sourceTerminals = Number(kpis?.sourceTerminals) || 0;
+  const onlineEmployeeCount = Number(kpis?.onlineEmployeeCount) || 0;
   const tokenTotal = kpis?.tokenTotal || "--";
 
   const cards = [
-    { name: "Agent总数", value: loading ? "--" : String(agentTotal) },
+    {
+      name: "数字员工总数",
+      value: loading ? "--" : String(agentTotal),
+    },
+    {
+      name: "在线员工数",
+      value: loading ? "--" : String(onlineEmployeeCount),
+    },
     { name: "用户总数", value: loading ? "--" : String(userTotal) },
-    { name: "来源终端", value: loading ? "--" : String(sourceTerminals) },
     { name: "Token消耗", value: loading ? "--" : tokenTotal }
   ];
 
@@ -32,9 +38,14 @@ export default function MonitorCenterPanorama({ kpis, loading }) {
                   <div className="absolute top-[32%] text-[28px] font-bold text-white font-sans drop-shadow-[0_0_10px_rgba(0,150,255,1)] tracking-wide">
                     {card.value}
                   </div>
-                  {/* 底座单位（保持原本指标名称） */}
-                  <div className="absolute bottom-[10%] text-[13px] text-[#e2f1fa] font-medium tracking-widest opacity-90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                    {card.name}
+                  {/* 底座：指标名 + 可选统计口径 */}
+                  <div className="absolute bottom-[8%] flex flex-col items-center gap-0.5 px-1">
+                    <span className="text-[13px] text-[#e2f1fa] font-medium tracking-widest opacity-90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                      {card.name}
+                    </span>
+                    {card.sub ? (
+                      <span className="text-[10px] text-[#8fb1c6]/90 tracking-wide">{card.sub}</span>
+                    ) : null}
                   </div>
                 </div>
               </div>

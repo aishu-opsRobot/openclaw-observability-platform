@@ -1,3 +1,13 @@
+/**
+ * 大屏无痕循环列表动画时长（秒）：每 10 秒经过 3 条等效高度。
+ * 与 `translateY(-50%)` 无缝循环配合，整份列表滚完一圈 = N 条，故周期 = (10/3)*N。
+ * @param {number} itemCount 单份列表条数
+ */
+export function getAutoScrollDurationSec(itemCount) {
+  const n = Math.max(1, Number(itemCount) || 0);
+  return (10 * n) / 3;
+}
+
 export const DIGITAL_EMPLOYEE_ROWS = [
   { name: "研发助手", role: "研发", status: "在线", sessions: "128", token: "3.1M", color: "#00f0ff" },
   { name: "数据分析员", role: "分析", status: "离线", sessions: "358", token: "9.8M", color: "#4a72ff" },

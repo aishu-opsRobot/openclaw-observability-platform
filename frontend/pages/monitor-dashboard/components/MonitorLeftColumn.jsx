@@ -1,9 +1,33 @@
+import { useEffect, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
+import { getAutoScrollDurationSec } from "../constants.js";
 import { getDailyTokenOption } from "../chartOptions.js";
 import MonitorPanel from "./MonitorPanel.jsx";
 
 export default function MonitorLeftColumn({ dailyTokens, instanceList, loading, error }) {
   const rows = Array.isArray(instanceList) ? instanceList : [];
+  const listViewportRef = useRef(null);
+  const listContentRef = useRef(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
+
+  useEffect(() => {
+    const viewportEl = listViewportRef.current;
+    const contentEl = listContentRef.current;
+    if (!viewportEl || !contentEl || loading || error || rows.length === 0) {
+      setShouldAutoScroll(false);
+      return;
+    }
+
+    const measure = () => {
+      setShouldAutoScroll(contentEl.scrollHeight > viewportEl.clientHeight + 1);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewportEl);
+    observer.observe(contentEl);
+    return () => observer.disconnect();
+  }, [loading, error, rows.length]);
   const formatSessions = (v) => {
     const n = Number(v);
     if (!Number.isFinite(n)) return String(v ?? "--");
@@ -70,7 +94,10 @@ export default function MonitorLeftColumn({ dailyTokens, instanceList, loading, 
         )}
       </MonitorPanel>
 
-      <MonitorPanel title="数字员工列表" className="flex-1 min-h-[250px]">
+      <MonitorPanel
+        title="数字员工列表"
+        className="flex-1 min-h-[250px]"
+      >
         <div className="h-full flex flex-col">
           <div className="flex text-[#8fb1c6] text-xs pb-2 border-b border-[#16436e] mb-2 px-2">
             <div className="w-[40%] pl-2">名称</div>
@@ -78,7 +105,7 @@ export default function MonitorLeftColumn({ dailyTokens, instanceList, loading, 
             <div className="w-[20%] text-right">会话</div>
             <div className="w-[20%] text-right">Token</div>
           </div>
-          <div className="relative flex-1 overflow-hidden px-2">
+          <div className="relative flex min-h-0 flex-1 flex-col px-2">
             {loading ? (
               <div className="h-full flex items-center justify-center px-4">
                 <div className="text-center">
@@ -103,9 +130,27 @@ export default function MonitorLeftColumn({ dailyTokens, instanceList, loading, 
                 </div>
               </div>
             ) : rows.length > 0 ? (
-              <div className="flex flex-col gap-3 animate-auto-scroll">
-                <div className="flex flex-col gap-3">{renderRows("a")}</div>
-                <div className="flex flex-col gap-3">{renderRows("b")}</div>
+              <div ref={listViewportRef} className="relative min-h-0 flex-1 overflow-hidden">
+                <div
+                  ref={listContentRef}
+                  className={`flex flex-col gap-3 ${shouldAutoScroll ? "animate-auto-scroll" : ""}`}
+                  style={
+                    shouldAutoScroll
+                      ? {
+                          "--auto-scroll-duration": `${getAutoScrollDurationSec(rows.length)}s`,
+                        }
+                      : undefined
+                  }
+                >
+                  {shouldAutoScroll ? (
+                    <>
+                      <div className="flex flex-col gap-3">{renderRows("a")}</div>
+                      <div className="flex flex-col gap-3">{renderRows("b")}</div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col gap-3">{renderRows("a")}</div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="h-full flex items-center justify-center px-4">

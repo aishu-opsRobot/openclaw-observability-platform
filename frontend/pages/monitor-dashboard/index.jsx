@@ -20,7 +20,7 @@ export default function MonitorDashboard() {
 
   // 会话模块数据（与行为审计概览口径一致）
   const { data: sessionData, loading: sessionLoading, error: sessionError } = useMonitorSession({
-    trendDays: 7,
+    trendDays: 30,
     riskLimit: 0,
   });
 
@@ -94,7 +94,7 @@ export default function MonitorDashboard() {
           error={otelError}
         />
         <MonitorCenterPanorama kpis={otelData?.kpis} loading={otelLoading} />
-        {/* 右列：会话概览 + 风险会话 → 使用 agent_sessions 数据源 */}
+        {/* 右列：会话概览 + 风险对话（均为滚动近30天） */}
         <MonitorRightColumn
           sessionOverview={sessionData?.overview}
           riskSessions={sessionData?.riskSessions}

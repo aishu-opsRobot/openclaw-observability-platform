@@ -14,13 +14,13 @@ async function fetchJson(url, signal) {
 /**
  * 大屏会话模块数据 Hook（拆分为三个独立接口）
  * - /api/monitor-session-overview
- * - /api/monitor-session-risk
+ * - /api/monitor-session-risk（消息级风险对话）
  * - /api/monitor-session-trend
  *
  * @param {{ trendDays?: number; riskLimit?: number; refreshInterval?: number }} opts
  */
 export function useMonitorSession({
-  trendDays = 14,
+  trendDays = 30,
   riskLimit = 0,
   refreshInterval = 120_000,
 } = {}) {

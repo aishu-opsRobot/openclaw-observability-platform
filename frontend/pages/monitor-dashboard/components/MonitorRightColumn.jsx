@@ -1,5 +1,53 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { getAutoScrollDurationSec } from "../constants.js";
 import MonitorPanel from "./MonitorPanel.jsx";
+
+/**
+ * 大屏列表在 CSS transform 动画下原生 `title` 常不弹出；用 portal + 跟随指针的浮层。
+ */
+function MonitorHoverTip({ text, className, children }) {
+  const full = text != null ? String(text).trim() : "";
+  const [tip, setTip] = useState(null);
+
+  if (!full) {
+    return <span className={className}>{children}</span>;
+  }
+
+  const show = (e) => {
+    setTip({ x: e.clientX, y: e.clientY, text: full });
+  };
+  const move = (e) => {
+    setTip((prev) => (prev ? { ...prev, x: e.clientX, y: e.clientY } : null));
+  };
+  const hide = () => setTip(null);
+
+  const portal =
+    tip &&
+    typeof document !== "undefined" &&
+    createPortal(
+      <div
+        className="pointer-events-none fixed z-[9999] max-w-[min(420px,calc(100vw-24px))] whitespace-pre-wrap break-words rounded border border-[#1f547f] bg-[#06182b] px-2 py-1.5 text-[12px] leading-snug text-[#d7ecff] shadow-[0_4px_12px_rgba(0,0,0,0.45)]"
+        style={{
+          left: `${tip.x}px`,
+          top: `${tip.y + 14}px`,
+          transform: "translateX(-50%)",
+        }}
+      >
+        {tip.text}
+      </div>,
+      document.body
+    );
+
+  return (
+    <>
+      <span className={className} onMouseEnter={show} onMouseMove={move} onMouseLeave={hide}>
+        {children}
+      </span>
+      {portal}
+    </>
+  );
+}
 
 const LEVEL_STYLES = {
   高危: {
@@ -28,38 +76,53 @@ const LEVEL_STYLES = {
   },
 };
 
-/** 风险会话时间线卡片 */
-function RiskSessionCard({ session }) {
-  const level = session.riskLevel || "健康";
+/** 风险对话时间线卡片：首行 图标+姓名+等级；次行 时间；末行 内容单行省略，悬停 MonitorHoverTip 见全文 */
+function RiskDialogueCard({ dialogue }) {
+  const level = dialogue.riskLevel || "健康";
   const style = LEVEL_STYLES[level] || LEVEL_STYLES["健康"];
-  const name = session.agentName || session.accountName || session.sessionId?.slice(0, 8) || "未知Agent";
+  const name = dialogue.agentName || dialogue.sessionId?.slice(0, 8) || "未知";
+  const rawContent = dialogue.content != null && String(dialogue.content).trim() !== "" ? String(dialogue.content) : "";
+  const contentLine = rawContent || "—";
 
   return (
-    <div className={`${style.cardBg} p-2 rounded relative ml-6`}>
-      <div className={`absolute top-4 -left-[19px] w-2 h-2 rounded-full ${style.node} ring-2 ring-[#010611] z-10`} />
-      <div className={`absolute top-2 right-2 border ${style.badge} text-[10px] px-1 rounded`}>
-        {level}
-      </div>
-      <div className="flex items-center gap-2 mb-1">
+    <div className={`${style.cardBg} p-2.5 rounded relative ml-6 min-w-0`}>
+      <div className={`absolute top-3 -left-[19px] w-2 h-2 rounded-full ${style.node} ring-2 ring-[#010611] z-10`} />
+      {/* 第一行：图标、数字员工姓名、等级标签 */}
+      <div className="flex items-center gap-2 min-w-0">
         <div className={`w-6 h-6 rounded flex items-center justify-center border ${style.icon} shrink-0`}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
               d="M15 19a3 3 0 00-6 0m6 0a3 3 0 013 3H6a3 3 0 013-3m6 0v-1a3 3 0 00-3-3m0 0a3 3 0 00-3 3v1m3-4a3 3 0 100-6 3 3 0 000 6z" />
           </svg>
         </div>
-        <div className="text-[12px] font-medium pr-8 truncate max-w-[140px]" title={name}>{name}</div>
+        <MonitorHoverTip
+          text={name}
+          className="min-w-0 flex-1 text-[12px] font-medium text-white truncate cursor-default"
+        >
+          {name}
+        </MonitorHoverTip>
+        <span className={`shrink-0 text-[10px] leading-none px-1.5 py-0.5 rounded border ${style.badge}`}>
+          {level}
+        </span>
       </div>
-      {session.channel && (
-        <div className="text-[#8fb1c6] text-[10px] mb-0.5">渠道: {session.channel}</div>
-      )}
-      <div className="text-[#8fb1c6] text-[10px]">会话时间: {session.displayTime}</div>
+      {/* 第二行：对话时间 */}
+      <div className="mt-1.5 text-[10px] text-[#8fb1c6] tabular-nums">
+        对话时间 {dialogue.displayTime}
+      </div>
+      {/* 第三行：对话内容单行省略；悬停显示完整内容 */}
+      <MonitorHoverTip
+        text={rawContent}
+        className="mt-1.5 block min-w-0 cursor-help text-[11px] leading-tight text-[#cbd5e1] truncate"
+      >
+        {contentLine}
+      </MonitorHoverTip>
     </div>
   );
 }
 
 /**
- * 右列：会话概览四宫格（来自 agent_sessions）+ 风险会话时间线（来自 agent_sessions_logs）
- * 数据口径与行为审计概览页一致，统计维度：最近30天
+ * 右列：会话概览四宫格 + 风险对话时间线
+ * 风险对话与溯源同源启发式（extractSessionRisks）；消息级风险项，滚动近30天（与溯源全量列表范围不同）。
  *
  * @param {{
  *   sessionOverview?: object;
@@ -137,7 +200,7 @@ export default function MonitorRightColumn({
     },
   ];
 
-  // 风险会话列表：仅使用真实接口数据
+  // 风险对话列表：仅使用真实接口数据
   const riskList = Array.isArray(riskSessions) ? riskSessions : [];
 
   useEffect(() => {
@@ -162,13 +225,10 @@ export default function MonitorRightColumn({
 
   return (
     <div className="flex flex-col gap-3 w-full lg:w-1/4 h-[calc(100%+2.5rem)] lg:-mt-10">
-      {/* 会话概览四宫格 — 最近30天统计，与行为审计概览同源 */}
+      {/* 会话概览：四宫格均为滚动近30天（最近一月） */}
       <MonitorPanel
         title="会话概览"
         className="shrink-0"
-        headerExtra={
-          <span className="text-[10px] text-[#8fb1c6]">近30天</span>
-        }
       >
         <div className="grid grid-cols-2 gap-3 px-1 py-2">
           {statCards.map((card) => (
@@ -190,15 +250,10 @@ export default function MonitorRightColumn({
         </div>
       </MonitorPanel>
 
-      {/* 风险会话时间线 — 最近30天风险会话，按时间倒序 */}
+      {/* 风险对话：滚动近30天，与概览同窗口 */}
       <MonitorPanel
-        title="风险会话"
+        title="风险对话"
         className="flex-1 min-h-[250px]"
-        headerExtra={
-          <span className="text-[10px] text-[#8fb1c6]">
-            近30天 · 最新 {loadingRisk ? "" : `(${riskSessionsTotal ?? riskList.length})`}
-          </span>
-        }
       >
         <div ref={listViewportRef} className="relative h-full overflow-hidden px-2">
           <div className="absolute top-0 bottom-0 left-[18px] w-px bg-[#16436e]" />
@@ -240,19 +295,26 @@ export default function MonitorRightColumn({
             <div
               ref={listContentRef}
               className={`flex flex-col gap-4 ${shouldAutoScroll ? "animate-auto-scroll" : ""}`}
+              style={
+                shouldAutoScroll
+                  ? {
+                      "--auto-scroll-duration": `${getAutoScrollDurationSec(riskList.length)}s`,
+                    }
+                  : undefined
+              }
             >
               {shouldAutoScroll ? (
                 [1, 2].map((listKey) => (
                   <div key={listKey} className="flex flex-col gap-4">
-                    {riskList.map((session, idx) => (
-                      <RiskSessionCard key={`${listKey}-${idx}`} session={session} />
+                    {riskList.map((dialogue, idx) => (
+                      <RiskDialogueCard key={`${listKey}-${dialogue.sessionId}-${idx}`} dialogue={dialogue} />
                     ))}
                   </div>
                 ))
               ) : (
                 <div className="flex flex-col gap-4">
-                  {riskList.map((session, idx) => (
-                    <RiskSessionCard key={idx} session={session} />
+                  {riskList.map((dialogue, idx) => (
+                    <RiskDialogueCard key={`${dialogue.sessionId}-${idx}`} dialogue={dialogue} />
                   ))}
                 </div>
               )}

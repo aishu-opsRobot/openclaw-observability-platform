@@ -30,6 +30,26 @@ const MONITOR_TOOLTIP_STYLE = {
   },
 };
 
+/**
+ * 监控大屏 Token Tooltip：以 k（千 Token）为基准，大到自动进到 M。
+ */
+export function formatMonitorTokenK(raw) {
+  const n = Math.abs(Number(raw)) || 0;
+  const sign = Number(raw) < 0 ? "-" : "";
+  if (n === 0) return "0";
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    const digits = m >= 100 ? 0 : m >= 10 ? 1 : 2;
+    return `${sign}${parseFloat(m.toFixed(digits))}M`;
+  }
+  const k = n / 1000;
+  if (k >= 1) {
+    const digits = k >= 100 ? 0 : k >= 10 ? 1 : 2;
+    return `${sign}${parseFloat(k.toFixed(digits))}k`;
+  }
+  return `${sign}${Math.round(n)}`;
+}
+
 export function getDailyTokenOption(dailyTokenData = []) {
   const list = Array.isArray(dailyTokenData) ? dailyTokenData : [];
   const xData = list.map((d) => d?.day || "");
@@ -41,7 +61,19 @@ export function getDailyTokenOption(dailyTokenData = []) {
 
   return {
     grid: { top: 20, right: 10, bottom: 20, left: 35 },
-    tooltip: { trigger: "axis" },
+    tooltip: {
+      ...MONITOR_TOOLTIP_STYLE,
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params) => {
+        const p = Array.isArray(params) && params.length > 0 ? params[0] : null;
+        if (!p) return "";
+        const day = String(p.axisValueLabel ?? p.name ?? "");
+        const raw = Number(p.value) || 0;
+        const marker = String(p.marker || "");
+        return `${day}<br/>${marker} Token: ${formatMonitorTokenK(raw)}`;
+      },
+    },
     xAxis: {
       type: "category",
       data: xData,
@@ -106,7 +138,7 @@ export function getTopAgentOption(topInstances = []) {
         const fullName = String(p.name || "");
         const value = Number(p.value) || 0;
         const marker = String(p.marker || "");
-        return `${fullName}<br/>${marker} Token: ${value.toLocaleString("zh-CN")}`;
+        return `${fullName}<br/>${marker} Token: ${formatMonitorTokenK(value)}`;
       },
     },
     xAxis: {
@@ -157,7 +189,7 @@ export function getDonutOption(data, colors) {
         const value = Number(p?.value) || 0;
         const percent = Number(p?.percent) || 0;
         const marker = String(p?.marker || "");
-        return `${name}<br/>${marker} 占比: ${percent.toFixed(1)}%<br/>${marker} 数值: ${value.toLocaleString("zh-CN")}`;
+        return `${name}<br/>${marker} 占比: ${percent.toFixed(1)}%<br/>${marker} 数值: ${formatMonitorTokenK(value)}`;
       },
     },
     series: [
@@ -199,6 +231,7 @@ export function getTrendOption(trendData = []) {
   const yMaxRaw = yData.length > 0 ? Math.max(...yData) : 0;
   const yMax = yMaxRaw > 0 ? Math.ceil(yMaxRaw * 1.2) : 10;
   const yInterval = Math.max(1, Math.ceil(yMax / 4));
+  const xLabelInterval = xData.length > 24 ? 2 : xData.length > 14 ? 1 : 0;
 
   return {
     grid: { top: 30, right: 10, bottom: 20, left: 35 },
@@ -219,7 +252,12 @@ export function getTrendOption(trendData = []) {
       type: "category",
       data: xData,
       axisLine: { lineStyle: { color: "#16436e" } },
-      axisLabel: { color: "#6b93a7", fontSize: 10 },
+      axisLabel: {
+        color: "#6b93a7",
+        fontSize: 10,
+        interval: xLabelInterval,
+        hideOverlap: true,
+      },
       axisTick: { show: false },
     },
     yAxis: {

@@ -7,12 +7,12 @@ import { getDonutOption, getTrendOption, getTopAgentOption } from "../chartOptio
 import MonitorPanel from "./MonitorPanel.jsx";
 
 /**
- * 底部行：Token Top10 条形图 + Token 分布双环形图 + 会话趋势折线图
+ * 底部行：Token Top10 条形图（与数字员工列表同源 merged 行 totalTokens）+ Token 分布双环形图 + 会话趋势折线图
  *
  * @param {{
  *   topInstances?: Array;
  *   tokenDistribution?: object;
- *   sessionTrend?: Array;       会话趋势（来自行为审计概览同源数据，最近7天）
+ *   sessionTrend?: Array;       会话趋势（来自行为审计概览同源数据，最近一个月）
  *   sessionTrendTotal?: number; 趋势期内会话总数
  *   loadingTop?: boolean;
  *   loadingDistribution?: boolean;
@@ -54,7 +54,10 @@ export default function MonitorBottomRow({
 
   return (
     <div className="flex flex-col lg:flex-row gap-3 flex-[3] min-h-[220px]">
-      <MonitorPanel title="Token 消耗 Top10" className="w-full lg:w-1/4 h-full">
+      <MonitorPanel
+        title="Token 消耗 Top10"
+        className="w-full lg:w-1/4 h-full"
+      >
         {loadingTop ? (
           <div className="h-full flex items-center justify-center px-4">
             <div className="text-center">
@@ -138,7 +141,7 @@ export default function MonitorBottomRow({
         )}
       </MonitorPanel>
 
-      {/* 会话趋势 — 与行为审计概览口径一致，最近7天 */}
+      {/* 会话趋势 — 与行为审计概览口径一致，最近一个月（30 日） */}
       <MonitorPanel
         title="会话趋势"
         className="w-full lg:w-1/4 h-full"

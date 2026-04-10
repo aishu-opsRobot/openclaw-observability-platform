@@ -64,13 +64,16 @@
     background: rgba(0, 240, 255, 0.6);
   }
 
-  /* 会话风险列表自动滚动动画 */
+  /* 大屏列表自动滚动：时长由 --auto-scroll-duration 控制（每 10 秒 3 条，见 getAutoScrollDurationSec） */
   @keyframes autoScrollVertical {
     0% { transform: translateY(0); }
     100% { transform: translateY(-50%); }
   }
   .animate-auto-scroll {
-    animation: autoScrollVertical 20s linear infinite;
+    animation-name: autoScrollVertical;
+    animation-duration: var(--auto-scroll-duration, 55s);
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
   }
   .animate-auto-scroll:hover {
     animation-play-state: paused;

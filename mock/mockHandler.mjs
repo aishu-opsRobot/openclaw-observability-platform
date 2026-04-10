@@ -17,6 +17,7 @@ import { mockSessionCostOptions } from "./data/session-cost-options.mjs";
 import { mockOtelOverview } from "./data/otel-overview.mjs";
 import { mockDigitalEmployeeOverview } from "./data/digital-employee-overview.mjs";
 import { mockDigitalEmployeeProfile } from "./data/digital-employee-profile.mjs";
+import { DIGITAL_EMPLOYEE_OVERVIEW_DEFAULT_DAYS } from "../frontend/utils/digitalEmployeeRows.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -85,7 +86,7 @@ export function handleMockRequest(url, res) {
   // --- 数字员工概览 ---
   if (url.startsWith("/api/digital-employees/overview")) {
     const u = new URL(url, "http://mock.local");
-    const days = Number(u.searchParams.get("days") || "7");
+    const days = Number(u.searchParams.get("days") || String(DIGITAL_EMPLOYEE_OVERVIEW_DEFAULT_DAYS));
     const hours = u.searchParams.get("hours");
     sendJson(res, 200, mockDigitalEmployeeOverview(days, hours));
     return true;
@@ -99,7 +100,7 @@ export function handleMockRequest(url, res) {
       sendJson(res, 400, { error: "缺少 agentName" });
       return true;
     }
-    const days = Number(u.searchParams.get("days") || "7");
+    const days = Number(u.searchParams.get("days") || String(DIGITAL_EMPLOYEE_OVERVIEW_DEFAULT_DAYS));
     const hours = u.searchParams.get("hours");
     const sessionKey = u.searchParams.get("sessionKey") || u.searchParams.get("session_key");
     const data = mockDigitalEmployeeProfile(agentName, days, hours, sessionKey);

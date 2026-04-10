@@ -177,7 +177,7 @@ export function agentSessionsDevApi() {
               sendJson(res, 400, { error: "缺少 agentName" });
               return;
             }
-            const data = await buildDigitalEmployeeProfile(agentName, daysParam ?? "7", hoursParam, sessionKeyParam);
+            const data = await buildDigitalEmployeeProfile(agentName, daysParam, hoursParam, sessionKeyParam);
             if (data.error === "missing_agent") {
               sendJson(res, 400, { error: data.message || "缺少 agentName" });
               return;
@@ -199,7 +199,7 @@ export function agentSessionsDevApi() {
             const u = new URL(url, "http://vite.local");
             const daysParam = u.searchParams.get("days");
             const hoursParam = u.searchParams.get("hours");
-            const data = await buildDigitalEmployeeOverview(daysParam ?? "7", hoursParam);
+            const data = await buildDigitalEmployeeOverview(daysParam, hoursParam);
             sendJson(res, 200, data);
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -362,7 +362,7 @@ export function agentSessionsDevApi() {
           try {
             const u = new URL(url, "http://vite.local");
             const data = await queryMonitorSession({
-              trendDays: Number(u.searchParams.get("trendDays") ?? "14"),
+              trendDays: Number(u.searchParams.get("trendDays") ?? "30"),
               riskLimit: Number(u.searchParams.get("riskLimit") ?? "50"),
             });
             sendJson(res, 200, data);
@@ -402,7 +402,7 @@ export function agentSessionsDevApi() {
           try {
             const u = new URL(url, "http://vite.local");
             const data = await queryMonitorSessionTrend({
-              trendDays: Number(u.searchParams.get("trendDays") ?? "14"),
+              trendDays: Number(u.searchParams.get("trendDays") ?? "30"),
             });
             sendJson(res, 200, data);
           } catch (e) {

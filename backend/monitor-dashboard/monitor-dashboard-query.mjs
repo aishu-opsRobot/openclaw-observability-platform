@@ -4,12 +4,24 @@
  *
  * 提供接口：GET /api/monitor-dashboard
  *   参数：trendDays（默认14）、topLimit（默认10）
+ *
+ * 性能：KPI 与审计/成本/数字员工并行（Promise.all）；重查询仅走本目录 monitor-doris-cache（不改其他模块）。
  */
 import mysql from "mysql2/promise";
 import { getDorisConfig } from "../agentSessionsQuery.mjs";
-import { queryCostOverviewSnapshot } from "../cost-analysis/cost-overview-query.mjs";
-import { queryAuditDashboardMetrics } from "../security-audit/audit-dashboard-query.mjs";
-import { buildDigitalEmployeeOverview } from "../digital-employee/digital-employee-service.mjs";
+import {
+  DIGITAL_EMPLOYEE_OVERVIEW_DEFAULT_DAYS,
+  dedupeEmployeesBySessionKey,
+  rowSessionKey,
+} from "../../frontend/utils/digitalEmployeeRows.js";
+import { buildMonitorDigitalEmployeeOverview } from "./build-monitor-employee-overview.mjs";
+import {
+  monitorCachedAuditDashboardMetrics,
+  monitorCachedCostOverviewSnapshot,
+} from "./monitor-doris-cache.mjs";
+
+/** 与数字员工概览「在线员工数」一致：近 15 分钟内有更新 */
+const EMPLOYEE_ONLINE_MINUTES = 15;
 
 function normalizeRow(row) {
   if (!row || typeof row !== "object") return row;
@@ -150,7 +162,7 @@ export async function queryMonitorDashboardSourceTerminals() {
 }
 
 export async function queryMonitorDashboardSourceTerminalsByWindow(window = "month") {
-  const snapshot = await queryAuditDashboardMetrics();
+  const snapshot = await monitorCachedAuditDashboardMetrics();
   const windows = snapshot?.windows || {};
   const safeWindow = ["today", "week", "month"].includes(window) ? window : "month";
   const row = windows[safeWindow] || {};
@@ -230,35 +242,75 @@ async function queryInstanceList(conn, h24AgoIso, nowIso) {
   });
 }
 
-function queryEmployeeListFromOverview(overviewPayload) {
-  const list = Array.isArray(overviewPayload?.agentsAggregated) ? overviewPayload.agentsAggregated : [];
-  const now = Date.now();
-  return list
-    .map((row) => {
-      const updatedAt = Number(row?.lastUpdatedAt) || 0;
-      const minutesAgo = updatedAt > 0 ? (now - updatedAt) / 60000 : Number.POSITIVE_INFINITY;
-      return {
-        id: String(row?.employeeKey || row?.sessionKey || row?.sessionId || ""),
-        name: String(row?.displayLabel || row?.agentName || "未命名"),
-        status: minutesAgo < 10 ? "在线" : "离线",
-        sessions: Number(row?.sessionCount) || 0,
-        tokenRaw: Number(row?.totalTokens) || 0,
-        token: formatTokenCount(Number(row?.totalTokens) || 0),
-      };
-    })
-    .sort((a, b) => b.tokenRaw - a.tokenRaw)
-    .slice(0, 30);
+/**
+ * 与 `DigitalEmployeeOverview.jsx` 中员工总表（tableRows）同源：
+ * o3_employees → dedupeEmployeesBySessionKey → 按 employeeKey 合并 agentsAggregated 的健康度等字段。
+ * Token 列与概览表「总 Token」列一致（合并后仍取 o3 行上的 totalTokens）。
+ * @returns {{ merged: object[]; aggByEmployeeKey: Map<string, object> }}
+ */
+function buildMergedO3RowsForMonitor(overviewPayload) {
+  const o3 = Array.isArray(overviewPayload?.o3_employees) ? overviewPayload.o3_employees : [];
+  const agentsAggregated = Array.isArray(overviewPayload?.agentsAggregated) ? overviewPayload.agentsAggregated : [];
+  const aggByEmployeeKey = new Map(
+    agentsAggregated.map((a) => [String(a.employeeKey ?? "").trim(), a]),
+  );
+  const o3EmployeesDeduped = dedupeEmployeesBySessionKey(o3);
+  const merged = o3EmployeesDeduped.map((r) => {
+    const employeeKey = String(rowSessionKey(r) ?? "").trim();
+    const agg = aggByEmployeeKey.get(employeeKey);
+    if (!agg) return r;
+    return {
+      ...r,
+      healthOverall: agg.healthOverall ?? r.healthOverall,
+      securityRiskScore: agg.securityRiskScore ?? r.securityRiskScore,
+      compositeScore: agg.compositeScore ?? r.compositeScore,
+      successRate: agg.successRate ?? r.successRate,
+      totalCostUsd: agg.totalCostUsd ?? r.totalCostUsd,
+      p95DurationMs: agg.p95DurationMs ?? r.p95DurationMs,
+    };
+  });
+  return { merged, aggByEmployeeKey };
 }
 
+/**
+ * 左侧数字员工列表：与概览默认表同源、顺序一致；展示窗口内合并后的全部员工（不截断条数）；会话数为聚合 sessionCount。
+ */
+function queryEmployeeListFromOverview(overviewPayload) {
+  const { merged, aggByEmployeeKey } = buildMergedO3RowsForMonitor(overviewPayload);
+  const now = Date.now();
+  const onlineMs = EMPLOYEE_ONLINE_MINUTES * 60 * 1000;
+  return merged.map((row) => {
+    const employeeKey = String(rowSessionKey(row) ?? "").trim();
+    const agg = aggByEmployeeKey.get(employeeKey);
+    const updatedAt = Number(agg?.lastUpdatedAt) || Number(row?.lastUpdatedAt) || 0;
+    const online = updatedAt > 0 && now - updatedAt <= onlineMs;
+    const totalTok = Number.isFinite(Number(row?.totalTokens)) ? Number(row.totalTokens) : 0;
+    const name = String(row?.agentName ?? "").trim() || String(row?.displayLabel ?? "未命名").trim() || "未命名";
+    return {
+      id: String(row?.employeeKey || row?.sessionKey || row?.sessionId || ""),
+      name,
+      status: online ? "在线" : "离线",
+      sessions: Number(agg?.sessionCount ?? row?.sessionCount) || 0,
+      tokenRaw: totalTok,
+      token: formatTokenCount(totalTok),
+    };
+  });
+}
+
+/**
+ * Token 消耗 TopN：与左侧数字员工列表、概览员工表「总 Token」列同源（合并行 totalTokens），
+ * 按 Token 降序取前 N；时间窗与 buildDigitalEmployeeOverview(DIGITAL_EMPLOYEE_OVERVIEW_DEFAULT_DAYS) 一致。
+ */
 function queryTopInstancesFromOverview(overviewPayload, limit) {
-  const list = Array.isArray(overviewPayload?.agentsAggregated) ? overviewPayload.agentsAggregated : [];
-  return list
+  const { merged } = buildMergedO3RowsForMonitor(overviewPayload);
+  const n = Math.max(1, Number(limit) || 10);
+  return [...merged]
+    .sort((a, b) => (Number(b.totalTokens) || 0) - (Number(a.totalTokens) || 0))
+    .slice(0, n)
     .map((row) => ({
-      name: String(row?.displayLabel || row?.agentName || "未命名"),
-      value: Number(row?.totalTokens) || 0,
-    }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, Math.max(1, Number(limit) || 10));
+      name: String(row?.agentName ?? "").trim() || String(row?.displayLabel ?? "未命名").trim() || "未命名",
+      value: Number.isFinite(Number(row?.totalTokens)) ? Number(row.totalTokens) : 0,
+    }));
 }
 
 function queryTokenDistributionFromCostOverview(snapshot) {
@@ -296,37 +348,49 @@ export async function queryMonitorDashboard(opts = {}) {
   const todayStartIso = formatDt(todayStart);
   const nowIso = formatDt(now);
 
-  const conn = await getConnection();
-  try {
-    const kpis = await queryTodayKPIs(conn, todayStartIso, nowIso);
-    const sourceTerminalSnapshot = await queryMonitorDashboardSourceTerminalsByWindow("month");
-    const costOverviewSnapshot = await queryCostOverviewSnapshot({ trendDays: 30 });
-    const monthTokenTotal = Number(costOverviewSnapshot?.cards?.month?.totalTokens) || 0;
-    const monthAgentTotal = Array.isArray(costOverviewSnapshot?.agentTokenDetail)
-      ? costOverviewSnapshot.agentTokenDetail.length
-      : 0;
-    const dailyTokens = queryDailyTokenTrendFromCostOverview(costOverviewSnapshot);
-    const employeeOverviewSnapshot = await buildDigitalEmployeeOverview("30");
-    const instanceList = queryEmployeeListFromOverview(employeeOverviewSnapshot);
-    const topInstances = queryTopInstancesFromOverview(employeeOverviewSnapshot, topLimit);
-    const tokenDistribution = queryTokenDistributionFromCostOverview(costOverviewSnapshot);
+  /** KPI（单连接）与审计快照、成本快照、数字员工概览彼此独立，并行以降低总耗时 */
+  const [kpis, sourceTerminalSnapshot, costOverviewSnapshot, employeeOverviewSnapshot] = await Promise.all([
+    (async () => {
+      const conn = await getConnection();
+      try {
+        return await queryTodayKPIs(conn, todayStartIso, nowIso);
+      } finally {
+        await conn.end();
+      }
+    })(),
+    queryMonitorDashboardSourceTerminalsByWindow("month"),
+    monitorCachedCostOverviewSnapshot({ trendDays: 30 }),
+    buildMonitorDigitalEmployeeOverview(DIGITAL_EMPLOYEE_OVERVIEW_DEFAULT_DAYS),
+  ]);
 
-    return {
-      generatedAt: now.toISOString(),
-      kpis: {
-        ...kpis,
-        agentTotal: monthAgentTotal,
-        tokenTotalRaw: monthTokenTotal,
-        tokenTotal: formatTokenCount(monthTokenTotal),
-        userTotal: sourceTerminalSnapshot.userAccess,
-        sourceTerminals: sourceTerminalSnapshot.sourceTerminals,
-      },
-      dailyTokens,
-      instanceList,
-      tokenDistribution,
-      topInstances,
-    };
-  } finally {
-    await conn.end();
-  }
+  const monthTokenTotal = Number(costOverviewSnapshot?.cards?.month?.totalTokens) || 0;
+  const dailyTokens = queryDailyTokenTrendFromCostOverview(costOverviewSnapshot);
+  const digitalEmployeeTotal =
+    Number(employeeOverviewSnapshot?.o1_summary?.employeeTotal) ||
+    (Array.isArray(employeeOverviewSnapshot?.agentsAggregated)
+      ? employeeOverviewSnapshot.agentsAggregated.length
+      : 0);
+  /** 与数字员工概览「在线员工数」同源：o1_summary.onlineEmployeeCount15m（近一个月窗口内聚合出的员工中，lastUpdatedAt 落在近 15 分钟的数量） */
+  const onlineEmployeeCount =
+    Number(employeeOverviewSnapshot?.o1_summary?.onlineEmployeeCount15m) || 0;
+  const instanceList = queryEmployeeListFromOverview(employeeOverviewSnapshot);
+  const topInstances = queryTopInstancesFromOverview(employeeOverviewSnapshot, topLimit);
+  const tokenDistribution = queryTokenDistributionFromCostOverview(costOverviewSnapshot);
+
+  return {
+    generatedAt: now.toISOString(),
+    kpis: {
+      ...kpis,
+      agentTotal: digitalEmployeeTotal,
+      onlineEmployeeCount,
+      tokenTotalRaw: monthTokenTotal,
+      tokenTotal: formatTokenCount(monthTokenTotal),
+      userTotal: sourceTerminalSnapshot.userAccess,
+      sourceTerminals: sourceTerminalSnapshot.sourceTerminals,
+    },
+    dailyTokens,
+    instanceList,
+    tokenDistribution,
+    topInstances,
+  };
 }
