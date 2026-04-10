@@ -77,8 +77,7 @@
 
 立即体验！
 
-- **地址**: http://nw1pe2061132.vicp.fun/
-- **密码**: aishu.cn
+- **地址**: http://hw2784.vicp.net:3000/
 
 
 ## 快速开始
@@ -145,6 +144,13 @@ sinks:
 
   audit_logs_to_doris:
     uri: "http://127.0.0.1:8040/api/opsRobot/audit_logs/_stream_load"
+
+  openclaw_config_to_doris:
+    uri: "http://127.0.0.1:8040/api/opsRobot/openclaw_config/_stream_load"
+
+  agent_models_to_doris:
+    uri: "http://127.0.0.1:8040/api/opsRobot/agent_models/_stream_load"
+
 ```
 
 指向实际的 OpenClaw 日志目录，实现日志采集监听：
@@ -168,6 +174,18 @@ sources:
   audit_logs:
     include:
       - "~/.openclaw/logs/config-audit.jsonl"
+
+  openclaw_config_file:
+    command:
+    - "sh"
+    - "-c"
+    - 'f="~/.openclaw/openclaw.json"; if [ -f "$$f" ]; then j=$$(tr -d "\n" < "$$f"); printf "{\"source_path\":\"%s\",\"openclaw_root\":%s}\n" "$$f" "$$j"; fi'
+
+  agent_models_file:
+    command:
+    - "sh"
+    - "-c"
+    - 'for f in ~/.openclaw/agents/*/agent/models.json; do if [ -f "$$f" ]; then agent=$$(basename "$$(dirname "$$(dirname "$$f")")"); [ -z "$$agent" ] && continue; j=$$(tr -d "\n" < "$$f"); printf "{\"source_path\":\"%s\",\"agent_name\":\"%s\",\"models_root\":%s}\n" "$$f" "$$agent" "$$j"; fi; done'
 ```
 
 #### 启动 Vector 采集器服务：
