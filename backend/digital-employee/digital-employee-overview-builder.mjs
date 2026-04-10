@@ -45,6 +45,22 @@ function dayKeyFromMs(ms) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+/** 查询窗口内所有本地日历日（含首尾），用于趋势图横轴补全 */
+function enumerateDayKeysFromRange(startMs, endMs) {
+  const start = new Date(startMs);
+  const end = new Date(endMs);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+  const out = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  if (cur > endDate) return [];
+  while (cur <= endDate) {
+    out.push(`${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}-${pad2(cur.getDate())}`);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
 /** 统一数字员工主键：agent_name */
 function employeeKeyFromRow(r, fallback = "") {
   const agentName = r.agentName != null && String(r.agentName).trim() ? String(r.agentName).trim() : "";
@@ -345,14 +361,61 @@ export function buildOverviewPayload(rows, ctx) {
   let globalCostRows = 0;
   const costByDay = new Map();
   const sessionsByDay = new Map();
+  const successByDay = new Map();
+  const tokensByDay = new Map();
+  /** @type {Map<string, Set<string>>} */
+  const activeAgentsByDay = new Map();
   /** @type {Map<string, Map<string, number>>} employeeKey(agent_name) -> (day -> usd) */
   const costByAgentDay = new Map();
+  const todayKeyGlobal = dayKeyFromMs(Date.now());
+  /** @type {Map<string, number>} */
+  const tokensTodayByAgent = new Map();
+  /** @type {Map<string, number>} */
+  const riskSessionCountByAgent = new Map();
+  /** @type {Map<string, number>} */
+  const lastRiskAtByAgent = new Map();
+  /** @type {Map<string, Map<string, number>>} employeeKey -> group_id -> count */
+  const workspaceCountByAgent = new Map();
+  let todaySessionsAll = 0;
+  let todayTasksAll = 0;
   for (const r of allRows) {
     const tMs = Number(r.endedAt) || Number(r.updatedAt);
     if (!Number.isFinite(tMs)) continue;
     const dk = dayKeyFromMs(tMs);
     if (!dk) continue;
     sessionsByDay.set(dk, (sessionsByDay.get(dk) ?? 0) + 1);
+    const okRun = !r.abortedLastRun;
+    successByDay.set(dk, (successByDay.get(dk) ?? 0) + (okRun ? 1 : 0));
+    const tokRow = Number(r.totalTokens);
+    if (Number.isFinite(tokRow)) tokensByDay.set(dk, (tokensByDay.get(dk) ?? 0) + tokRow);
+    const ekRow = employeeKeyFromRow(r, "未命名");
+    if (!activeAgentsByDay.has(dk)) activeAgentsByDay.set(dk, new Set());
+    activeAgentsByDay.get(dk).add(ekRow);
+    if (dk === todayKeyGlobal) {
+      todaySessionsAll += 1;
+      todayTasksAll += Number(r.toolUseCount) || 0;
+      if (Number.isFinite(tokRow)) {
+        tokensTodayByAgent.set(ekRow, (tokensTodayByAgent.get(ekRow) ?? 0) + tokRow);
+      }
+    }
+    const rh = Number(r.riskHigh) || 0;
+    const rm = Number(r.riskMedium) || 0;
+    if (rh > 0 || rm > 0) {
+      riskSessionCountByAgent.set(ekRow, (riskSessionCountByAgent.get(ekRow) ?? 0) + 1);
+      const prev = lastRiskAtByAgent.get(ekRow) ?? 0;
+      if (tMs > prev) lastRiskAtByAgent.set(ekRow, tMs);
+    }
+    const gid =
+      r.groupId != null && String(r.groupId).trim()
+        ? String(r.groupId).trim()
+        : r._doris && r._doris.group_id != null && String(r._doris.group_id).trim()
+          ? String(r._doris.group_id).trim()
+          : null;
+    if (gid) {
+      if (!workspaceCountByAgent.has(ekRow)) workspaceCountByAgent.set(ekRow, new Map());
+      const wm = workspaceCountByAgent.get(ekRow);
+      wm.set(gid, (wm.get(gid) ?? 0) + 1);
+    }
     const cUsd = sessionEstimatedCostUsd(r);
     if (cUsd == null || cUsd <= 0) continue;
     globalCostUsd += cUsd;
@@ -364,6 +427,12 @@ export function buildOverviewPayload(rows, ctx) {
     am.set(dk, (am.get(dk) ?? 0) + cUsd);
   }
   const hasCostData = globalCostRows > 0;
+
+  const durationVals = allRows.map((r) => Number(r.durationMs)).filter((n) => Number.isFinite(n) && n >= 0);
+  const avgResponseDurationMs =
+    durationVals.length > 0
+      ? Math.round((durationVals.reduce((s, v) => s + v, 0) / durationVals.length) * 10) / 10
+      : null;
 
   const agents = [];
   for (const a of agentMap.values()) {
@@ -518,9 +587,6 @@ export function buildOverviewPayload(rows, ctx) {
   const costTrendDaily = [...costByDay.entries()]
     .map(([day, usd]) => ({ day, usd: Math.round(usd * 1e4) / 1e4 }))
     .sort((a, b) => a.day.localeCompare(b.day));
-  const sessionTrendDaily = [...sessionsByDay.entries()]
-    .map(([day, sessions]) => ({ day, sessions }))
-    .sort((a, b) => a.day.localeCompare(b.day));
 
   const allCostDaysSet = new Set();
   for (const d of costByDay.keys()) allCostDaysSet.add(d);
@@ -552,7 +618,166 @@ export function buildOverviewPayload(rows, ctx) {
   const secYellow = agents.filter((a) => a.dimensions.security === "yellow").length;
   const secRed = agents.filter((a) => a.dimensions.security === "red").length;
 
-  const abortedRate = totalSessions > 0 ? rows.filter((r) => r.abortedLastRun).length / totalSessions : null;
+  const abortedRate = totalSessions > 0 ? allRows.filter((r) => r.abortedLastRun).length / totalSessions : null;
+
+  const WINDOW_MS_15 = 15 * 60 * 1000;
+  const offlineAgentCount = agents.filter((a) => {
+    const u = Number(a.lastUpdatedAt) || 0;
+    return !u || Date.now() - u > WINDOW_MS_15;
+  }).length;
+  const abnormalAgentCount = agents.filter((a) => a.healthOverall === "yellow" || a.healthOverall === "red").length;
+
+  const nowMs = Date.now();
+  const contiguousTrendDays =
+    Number.isFinite(windowStartMs) && windowStartMs <= nowMs ? enumerateDayKeysFromRange(windowStartMs, nowMs) : [];
+  const trendDaySparse = [
+    ...new Set([...sessionsByDay.keys(), ...tokensByDay.keys(), ...activeAgentsByDay.keys()]),
+  ].sort((a, b) => a.localeCompare(b));
+  const trendDaysSorted = contiguousTrendDays.length > 0 ? contiguousTrendDays : trendDaySparse;
+
+  const sessionTrendDaily = trendDaysSorted.map((day) => ({
+    day,
+    sessions: sessionsByDay.get(day) ?? 0,
+  }));
+  const activeAgentTrendDaily = trendDaysSorted.map((day) => ({
+    day,
+    activeAgents: activeAgentsByDay.get(day)?.size ?? 0,
+  }));
+  const responseRateTrendDaily = trendDaysSorted.map((day) => {
+    const s = sessionsByDay.get(day) ?? 0;
+    const ok = successByDay.get(day) ?? 0;
+    return {
+      day,
+      rate: s > 0 ? Math.round((ok / s) * 1e4) / 1e4 : null,
+    };
+  });
+  const tokenTrendDaily = trendDaysSorted.map((day) => ({
+    day,
+    tokens: Math.round(tokensByDay.get(day) ?? 0),
+  }));
+
+  const totalTokSumAgg = agents.reduce((s, a) => s + (a.totalTokens ?? 0), 0) || 1;
+  const tokenPieCandidates = [...agents]
+    .filter((a) => (a.totalTokens ?? 0) > 0)
+    .sort((x, y) => (y.totalTokens ?? 0) - (x.totalTokens ?? 0));
+  const tokenPieTop = tokenPieCandidates.slice(0, 8);
+  const otherTokSum = tokenPieCandidates.slice(8).reduce((s, a) => s + (a.totalTokens ?? 0), 0);
+  /** @type {{ name: string, value: number, pct: number }[]} */
+  const tokenPie = [
+    ...tokenPieTop.map((a) => ({
+      name: a.agentName,
+      value: a.totalTokens,
+      pct: Math.round(((a.totalTokens ?? 0) / totalTokSumAgg) * 1000) / 1000,
+    })),
+    ...(otherTokSum > 0
+      ? [
+          {
+            name: "__other__",
+            value: Math.round(otherTokSum),
+            pct: Math.round((otherTokSum / totalTokSumAgg) * 1000) / 1000,
+          },
+        ]
+      : []),
+  ];
+
+  const totalSesSumAgg = agents.reduce((s, a) => s + (a.sessionCount ?? 0), 0) || 1;
+  const sessionPieCandidates = [...agents]
+    .filter((a) => (a.sessionCount ?? 0) > 0)
+    .sort((x, y) => (y.sessionCount ?? 0) - (x.sessionCount ?? 0));
+  const sessionPieTop = sessionPieCandidates.slice(0, 8);
+  const otherSesSum = sessionPieCandidates.slice(8).reduce((s, a) => s + (a.sessionCount ?? 0), 0);
+  /** @type {{ name: string, value: number, pct: number }[]} */
+  const sessionPie = [
+    ...sessionPieTop.map((a) => ({
+      name: a.agentName,
+      value: a.sessionCount,
+      pct: Math.round(((a.sessionCount ?? 0) / totalSesSumAgg) * 1000) / 1000,
+    })),
+    ...(otherSesSum > 0
+      ? [
+          {
+            name: "__other__",
+            value: otherSesSum,
+            pct: Math.round((otherSesSum / totalSesSumAgg) * 1000) / 1000,
+          },
+        ]
+      : []),
+  ];
+
+  const statusPie = [
+    { key: "green", value: greenE },
+    { key: "yellow", value: yellowE },
+    { key: "red", value: redE },
+  ];
+
+  /** @param {string} ek */
+  function pickWorkspaceForAgent(ek) {
+    const m = workspaceCountByAgent.get(ek);
+    if (!m || m.size === 0) return null;
+    return [...m.entries()].sort((x, y) => y[1] - x[1])[0][0];
+  }
+
+  const topByTasks = [...agents]
+    .sort((a, b) => (b.totalToolUse ?? 0) - (a.totalToolUse ?? 0))
+    .slice(0, 10)
+    .map((a) => ({
+      employeeKey: a.employeeKey,
+      agentName: a.agentName,
+      displayLabel: a.displayLabel,
+      taskCount: a.totalToolUse ?? 0,
+      successRate: a.successRate,
+      status: a.healthOverall,
+    }));
+
+  const topByTokens = [...agents]
+    .sort((a, b) => (b.totalTokens ?? 0) - (a.totalTokens ?? 0))
+    .slice(0, 10)
+    .map((a) => ({
+      employeeKey: a.employeeKey,
+      agentName: a.agentName,
+      totalTokens: a.totalTokens,
+      todayTokens: tokensTodayByAgent.get(a.employeeKey) ?? 0,
+      workspace: pickWorkspaceForAgent(a.employeeKey),
+    }));
+
+  const topByRiskDetail = [...agents]
+    .sort((a, b) => {
+      const sa = (a.riskHighTotal || 0) * 1000 + (a.riskMediumTotal || 0);
+      const sb = (b.riskHighTotal || 0) * 1000 + (b.riskMediumTotal || 0);
+      return sb - sa;
+    })
+    .slice(0, 10)
+    .map((a) => ({
+      employeeKey: a.employeeKey,
+      agentName: a.agentName,
+      riskSessionCount: riskSessionCountByAgent.get(a.employeeKey) ?? 0,
+      maxRiskLevel:
+        (a.riskHighTotal ?? 0) > 0 ? "P0" : (a.riskMediumTotal ?? 0) > 0 ? "P1" : (a.riskLowTotal ?? 0) > 0 ? "P2" : "—",
+      lastRiskAt: lastRiskAtByAgent.get(a.employeeKey) ?? null,
+    }));
+
+  const runOverview = {
+    metrics: {
+      offlineAgentCount,
+      abnormalAgentCount,
+      todayTotalTasks: todayTasksAll,
+      todayTotalSessions: todaySessionsAll,
+      avgTaskSuccessRate: overallSuccessRate,
+      avgResponseDurationMs,
+      employeeTotal: distinctAgents,
+      onlineAgentCount: onlineEmployeeCount15m,
+    },
+    statusPie,
+    sessionPie,
+    tokenPie,
+    activeAgentTrendDaily,
+    sessionTrendDaily,
+    responseRateTrendDaily,
+    tokenTrendDaily,
+    topByTasks,
+    topByTokens,
+    topByRisk: topByRiskDetail,
+  };
 
   const topRisk = [...agents]
     .sort((a, b) => b.riskHighTotal - a.riskHighTotal || b.riskMediumTotal - a.riskMediumTotal)
@@ -635,6 +860,7 @@ export function buildOverviewPayload(rows, ctx) {
     windowStartMs,
     days: ctx.days,
     windowHours: ctx.hasHours ? Math.round((Date.now() - windowStartMs) / 3600000) : null,
+    runOverview,
     o1_summary,
     o2_dimensions,
     o3_employees,

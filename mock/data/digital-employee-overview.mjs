@@ -137,6 +137,235 @@ function buildDays(days) {
   return out;
 }
 
+function dayKeyFromMs(ms) {
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * 与后端 buildOverviewPayload 中 runOverview 结构对齐，供 Mock 使用
+ * @param {object[]} agentsAggregated
+ * @param {object[]} o3Employees
+ * @param {string[]} daysList
+ * @param {number} now
+ */
+function buildMockRunOverview(agentsAggregated, o3Employees, daysList, now) {
+  const sessionsByDay = new Map();
+  const successByDay = new Map();
+  const tokensByDay = new Map();
+  /** @type {Map<string, Set<string>>} */
+  const activeAgentsByDay = new Map();
+  const tokensTodayByAgent = new Map();
+  const riskSessionCountByAgent = new Map();
+  const lastRiskAtByAgent = new Map();
+  /** @type {Map<string, Map<string, number>>} */
+  const workspaceCountByAgent = new Map();
+
+  const employeeKeyOf = (r) => (r.agentName && String(r.agentName).trim()) || "未命名";
+  const todayKey = daysList[daysList.length - 1] || dayStr(0);
+  let todaySessionsAll = 0;
+  let todayTasksAll = 0;
+
+  for (const r of o3Employees) {
+    const tMs = Number(r.lastUpdatedAt) || Number(r.endedAt);
+    if (!Number.isFinite(tMs)) continue;
+    const dk = dayKeyFromMs(tMs);
+    if (!dk) continue;
+    sessionsByDay.set(dk, (sessionsByDay.get(dk) ?? 0) + 1);
+    const okRun = !(Number(r.abortedCount) > 0) && !r.abortedLastRun;
+    successByDay.set(dk, (successByDay.get(dk) ?? 0) + (okRun ? 1 : 0));
+    const tokRow = Number(r.totalTokens);
+    if (Number.isFinite(tokRow)) tokensByDay.set(dk, (tokensByDay.get(dk) ?? 0) + tokRow);
+    const ek = employeeKeyOf(r);
+    if (!activeAgentsByDay.has(dk)) activeAgentsByDay.set(dk, new Set());
+    activeAgentsByDay.get(dk).add(ek);
+    if (dk === todayKey) {
+      todaySessionsAll += 1;
+      todayTasksAll += Number(r.totalToolUse) || Number(r.toolUseCount) || 0;
+      if (Number.isFinite(tokRow)) {
+        tokensTodayByAgent.set(ek, (tokensTodayByAgent.get(ek) ?? 0) + tokRow);
+      }
+    }
+    const rh = Number(r.riskHigh ?? r.riskHighTotal) || 0;
+    const rm = Number(r.riskMedium ?? r.riskMediumTotal) || 0;
+    if (rh > 0 || rm > 0) {
+      riskSessionCountByAgent.set(ek, (riskSessionCountByAgent.get(ek) ?? 0) + 1);
+      const prev = lastRiskAtByAgent.get(ek) ?? 0;
+      if (tMs > prev) lastRiskAtByAgent.set(ek, tMs);
+    }
+    const gid =
+      r.groupId != null && String(r.groupId).trim()
+        ? String(r.groupId).trim()
+        : r._doris && r._doris.group_id != null && String(r._doris.group_id).trim()
+          ? String(r._doris.group_id).trim()
+          : null;
+    if (gid) {
+      if (!workspaceCountByAgent.has(ek)) workspaceCountByAgent.set(ek, new Map());
+      const wm = workspaceCountByAgent.get(ek);
+      wm.set(gid, (wm.get(gid) ?? 0) + 1);
+    }
+  }
+
+  const WINDOW_MS_15 = 15 * 60 * 1000;
+  const offlineAgentCount = agentsAggregated.filter((a) => {
+    const u = Number(a.lastUpdatedAt) || 0;
+    return !u || now - u > WINDOW_MS_15;
+  }).length;
+  const abnormalAgentCount = agentsAggregated.filter((a) => a.healthOverall === "yellow" || a.healthOverall === "red").length;
+
+  const greenE = agentsAggregated.filter((a) => a.healthOverall === "green").length;
+  const yellowE = agentsAggregated.filter((a) => a.healthOverall === "yellow").length;
+  const redE = agentsAggregated.filter((a) => a.healthOverall === "red").length;
+
+  const totalSessions = o3Employees.length;
+  const successSessions = o3Employees.filter((r) => !(Number(r.abortedCount) > 0)).length;
+  const overallSuccessRate = totalSessions > 0 ? successSessions / totalSessions : null;
+  const durationVals = o3Employees.map((r) => Number(r.durationMs ?? r.p95DurationMs ?? 0)).filter((n) => Number.isFinite(n) && n >= 0);
+  const avgResponseDurationMs =
+    durationVals.length > 0 ? Math.round((durationVals.reduce((s, v) => s + v, 0) / durationVals.length) * 10) / 10 : null;
+
+  const trendDaysSorted =
+    daysList.length > 0
+      ? [...daysList].sort((a, b) => a.localeCompare(b))
+      : [...new Set([...sessionsByDay.keys(), ...tokensByDay.keys(), ...activeAgentsByDay.keys()])].sort((a, b) =>
+          a.localeCompare(b),
+        );
+  const activeAgentTrendDaily = trendDaysSorted.map((day) => ({
+    day,
+    activeAgents: activeAgentsByDay.get(day)?.size ?? 0,
+  }));
+  const sessionTrendDaily = trendDaysSorted.map((day) => ({
+    day,
+    sessions: sessionsByDay.get(day) ?? 0,
+  }));
+  const responseRateTrendDaily = trendDaysSorted.map((day) => {
+    const s = sessionsByDay.get(day) ?? 0;
+    const ok = successByDay.get(day) ?? 0;
+    return { day, rate: s > 0 ? Math.round((ok / s) * 1e4) / 1e4 : null };
+  });
+  const tokenTrendDaily = trendDaysSorted.map((day) => ({
+    day,
+    tokens: Math.round(tokensByDay.get(day) ?? 0),
+  }));
+
+  const totalTokSumAgg = agentsAggregated.reduce((s, a) => s + (Number(a.totalTokens) || 0), 0) || 1;
+  const tokenPieCandidates = [...agentsAggregated]
+    .filter((a) => (Number(a.totalTokens) || 0) > 0)
+    .sort((x, y) => (Number(y.totalTokens) || 0) - (Number(x.totalTokens) || 0));
+  const tokenPieTop = tokenPieCandidates.slice(0, 8);
+  const otherTokSum = tokenPieCandidates.slice(8).reduce((s, a) => s + (Number(a.totalTokens) || 0), 0);
+  const tokenPie = [
+    ...tokenPieTop.map((a) => ({
+      name: a.agentName,
+      value: Math.round(Number(a.totalTokens) || 0),
+      pct: Math.round(((Number(a.totalTokens) || 0) / totalTokSumAgg) * 1000) / 1000,
+    })),
+    ...(otherTokSum > 0
+      ? [{ name: "__other__", value: Math.round(otherTokSum), pct: Math.round((otherTokSum / totalTokSumAgg) * 1000) / 1000 }]
+      : []),
+  ];
+
+  const totalSesSumAgg = agentsAggregated.reduce((s, a) => s + (Number(a.sessionCount) || 0), 0) || 1;
+  const sessionPieCandidates = [...agentsAggregated]
+    .filter((a) => (Number(a.sessionCount) || 0) > 0)
+    .sort((x, y) => (Number(y.sessionCount) || 0) - (Number(x.sessionCount) || 0));
+  const sessionPieTop = sessionPieCandidates.slice(0, 8);
+  const otherSesSum = sessionPieCandidates.slice(8).reduce((s, a) => s + (Number(a.sessionCount) || 0), 0);
+  const sessionPie = [
+    ...sessionPieTop.map((a) => ({
+      name: a.agentName,
+      value: Math.round(Number(a.sessionCount) || 0),
+      pct: Math.round(((Number(a.sessionCount) || 0) / totalSesSumAgg) * 1000) / 1000,
+    })),
+    ...(otherSesSum > 0
+      ? [{ name: "__other__", value: Math.round(otherSesSum), pct: Math.round((otherSesSum / totalSesSumAgg) * 1000) / 1000 }]
+      : []),
+  ];
+
+  const statusPie = [
+    { key: "green", value: greenE },
+    { key: "yellow", value: yellowE },
+    { key: "red", value: redE },
+  ];
+
+  const pickWorkspaceForAgent = (ek) => {
+    const m = workspaceCountByAgent.get(ek);
+    if (!m || m.size === 0) return null;
+    return [...m.entries()].sort((x, y) => y[1] - x[1])[0][0];
+  };
+
+  const topByTasks = [...agentsAggregated]
+    .sort((a, b) => (Number(b.totalToolUse) || 0) - (Number(a.totalToolUse) || 0))
+    .slice(0, 10)
+    .map((a) => ({
+      employeeKey: a.employeeKey,
+      agentName: a.agentName,
+      displayLabel: a.displayLabel,
+      taskCount: Number(a.totalToolUse) || 0,
+      successRate: a.successRate,
+      status: a.healthOverall,
+    }));
+
+  const topByTokens = [...agentsAggregated]
+    .sort((a, b) => (Number(b.totalTokens) || 0) - (Number(a.totalTokens) || 0))
+    .slice(0, 10)
+    .map((a) => ({
+      employeeKey: a.employeeKey,
+      agentName: a.agentName,
+      totalTokens: Math.round(Number(a.totalTokens) || 0),
+      todayTokens: tokensTodayByAgent.get(a.employeeKey) ?? 0,
+      workspace: pickWorkspaceForAgent(a.employeeKey),
+    }));
+
+  const topByRisk = [...agentsAggregated]
+    .sort((a, b) => {
+      const sa = (Number(a.riskHighTotal) || 0) * 1000 + (Number(a.riskMediumTotal) || 0);
+      const sb = (Number(b.riskHighTotal) || 0) * 1000 + (Number(b.riskMediumTotal) || 0);
+      return sb - sa;
+    })
+    .slice(0, 10)
+    .map((a) => ({
+      employeeKey: a.employeeKey,
+      agentName: a.agentName,
+      riskSessionCount: riskSessionCountByAgent.get(a.employeeKey) ?? 0,
+      maxRiskLevel:
+        (Number(a.riskHighTotal) || 0) > 0 ? "P0" : (Number(a.riskMediumTotal) || 0) > 0 ? "P1" : (Number(a.riskLowTotal) || 0) > 0 ? "P2" : "—",
+      lastRiskAt: lastRiskAtByAgent.get(a.employeeKey) ?? null,
+    }));
+
+  const onlineEmployeeCount15m = agentsAggregated.filter((a) => {
+    const u = Number(a.lastUpdatedAt) || 0;
+    return u > 0 && now - u <= WINDOW_MS_15;
+  }).length;
+
+  return {
+    metrics: {
+      offlineAgentCount,
+      abnormalAgentCount,
+      todayTotalTasks: todayTasksAll,
+      todayTotalSessions: todaySessionsAll,
+      avgTaskSuccessRate: overallSuccessRate,
+      avgResponseDurationMs,
+      employeeTotal: agentsAggregated.length,
+      onlineAgentCount: onlineEmployeeCount15m,
+    },
+    statusPie,
+    sessionPie,
+    tokenPie,
+    activeAgentTrendDaily,
+    sessionTrendDaily,
+    responseRateTrendDaily,
+    tokenTrendDaily,
+    topByTasks,
+    topByTokens,
+    topByRisk,
+  };
+}
+
 function buildCostTrendByEmployee(days) {
   const dayList = buildDays(days);
   const series = MOCK_EMPLOYEES.map((e, idx) => {
@@ -192,6 +421,7 @@ function buildSessionRows(agents, days) {
           compositeScore: Math.round(((a.successRate * 100 + (100 - a.securityRiskScore)) / 2) * 10) / 10,
           avgSkillCount: a.avgSkillCount,
           p95DurationMs: a.p95DurationMs,
+          durationMs: Math.round(Number(a.p95DurationMs) + (seed % 9) * 400),
           chatTypeTop: a.chatTypeTop,
           healthOverall: a.healthOverall,
           dimensions: a.dimensions,
@@ -245,11 +475,14 @@ export function mockDigitalEmployeeOverview(days = 7, _hours) {
   }));
   const highRiskEmployeeCount = agentsAggregated.filter((a) => Number(a.securityRiskScore) >= 70).length;
 
+  const runOverview = buildMockRunOverview(agentsAggregated, o3Employees, daysList, now);
+
   return {
     source: "mock",
     days: d,
     hours: null,
     windowStartMs,
+    runOverview,
     o1_summary: {
       healthScorePct: Math.round(((healthBuckets.green * 100 + healthBuckets.yellow * 70 + healthBuckets.red * 35) / Math.max(1, agentsAggregated.length)) * 10) / 10,
       healthBuckets,
