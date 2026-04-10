@@ -244,6 +244,15 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
         costUsd: 0,
         durationSum: 0,
         durationN: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        toolUseSum: 0,
+        toolErrSum: 0,
+        skillMentions: 0,
+        sessionsWithSkill: 0,
+        unknownChannelSessions: 0,
+        userByKey: new Map(),
+        channelByKey: new Map(),
       });
     }
     const b = byDay.get(dk);
@@ -257,6 +266,30 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
       b.durationSum += dm;
       b.durationN += 1;
     }
+    if (it != null) b.inputTokens += it;
+    if (ot != null) b.outputTokens += ot;
+    const tUse = pickRowNum(r, ["toolUseCount", "tool_use_count"]);
+    if (tUse != null && tUse >= 0) b.toolUseSum += tUse;
+    const tErr = pickRowNum(r, ["toolErrorCount", "tool_error_count"]);
+    if (tErr != null && tErr >= 0) b.toolErrSum += tErr;
+    const skEntries = collectSkillEntries(r);
+    if (skEntries.length > 0) {
+      b.sessionsWithSkill += 1;
+      b.skillMentions += skEntries.length;
+    }
+    const chForDay = r.lastChannel ?? r.channel;
+    const chDayLabel = chForDay != null && String(chForDay).trim() ? String(chForDay).trim() : "";
+    if (!chDayLabel) b.unknownChannelSessions += 1;
+    const userLabelDay =
+      r.label != null && String(r.label).trim()
+        ? String(r.label).trim()
+        : r.originLabel != null && String(r.originLabel).trim()
+          ? String(r.originLabel).trim()
+          : "";
+    const uKeyDay = userLabelDay || "__unknown__";
+    b.userByKey.set(uKeyDay, (b.userByKey.get(uKeyDay) ?? 0) + 1);
+    const cKeyDay = chDayLabel || "__unknown__";
+    b.channelByKey.set(cKeyDay, (b.channelByKey.get(cKeyDay) ?? 0) + 1);
   }
 
   const trendDaily = [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
@@ -275,6 +308,30 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
     day: d.day,
     usd: Math.round(d.costUsd * 1e4) / 1e4,
   }));
+  const tokenTrendDaily = trendDaily.map((d) => ({
+    day: d.day,
+    input: Math.round(Number(d.inputTokens) || 0),
+    output: Math.round(Number(d.outputTokens) || 0),
+  }));
+  const toolTrendDaily = trendDaily.map((d) => ({
+    day: d.day,
+    toolCalls: Math.round(Number(d.toolUseSum) || 0),
+    toolErrors: Math.round(Number(d.toolErrSum) || 0),
+  }));
+  const skillTrendDaily = trendDaily.map((d) => ({
+    day: d.day,
+    skillMentions: Math.round(Number(d.skillMentions) || 0),
+    sessionsWithSkill: Math.round(Number(d.sessionsWithSkill) || 0),
+  }));
+  const channelTrendDaily = trendDaily.map((d) => {
+    const sess = Math.round(Number(d.sessions) || 0);
+    const unk = Math.round(Number(d.unknownChannelSessions) || 0);
+    return {
+      day: d.day,
+      knownChannels: Math.max(0, sess - unk),
+      unknownChannels: unk,
+    };
+  });
 
   const uniqueSkills = [...skillFreq.keys()].sort((a, b) => (skillFreq.get(b) ?? 0) - (skillFreq.get(a) ?? 0));
   const toolsFromLogs = Array.isArray(ctx.toolNamesFromLogs) ? ctx.toolNamesFromLogs.filter(Boolean) : [];
@@ -338,6 +395,98 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
     inputTokensFinal > 0 && outputTokensFinal >= 0
       ? Math.round((outputTokensFinal / Math.max(1, inputTokensFinal)) * 100) / 100
       : null;
+
+  /** @type {Map<string, number>} */
+  const modelTokenMap = new Map();
+  /** @type {Map<string, number>} */
+  const userTokenMap = new Map();
+  /** @type {Map<string, number>} */
+  const channelTokenMap = new Map();
+  /** @type {{ sessionKey: string, sessionId: string | null, totalTokens: number, updatedAt: number | null }[]} */
+  const sessionTokenList = [];
+  for (const r of sessionRows) {
+    const rit = pickRowNum(r, ["inputTokens", "input_tokens"]);
+    const rot = pickRowNum(r, ["outputTokens", "output_tokens"]);
+    const rowIn = rit != null ? rit : 0;
+    const rowOut = rot != null ? rot : 0;
+    const rowTot = rowIn + rowOut;
+    const mn =
+      r.model != null && String(r.model).trim()
+        ? String(r.model).trim()
+        : "__unknown__";
+    if (rowTot > 0) {
+      modelTokenMap.set(mn, (modelTokenMap.get(mn) ?? 0) + rowTot);
+
+      const userLabel =
+        r.label != null && String(r.label).trim()
+          ? String(r.label).trim()
+          : r.originLabel != null && String(r.originLabel).trim()
+            ? String(r.originLabel).trim()
+            : "";
+      const userKey = userLabel || "__unknown__";
+      userTokenMap.set(userKey, (userTokenMap.get(userKey) ?? 0) + rowTot);
+
+      const chRaw = r.lastChannel ?? r.channel;
+      const channelLabel =
+        chRaw != null && String(chRaw).trim() ? String(chRaw).trim() : "";
+      const channelKey = channelLabel || "__unknown__";
+      channelTokenMap.set(channelKey, (channelTokenMap.get(channelKey) ?? 0) + rowTot);
+    }
+    const sk = r.sessionKey != null && String(r.sessionKey).trim() ? String(r.sessionKey).trim() : "";
+    const sidRaw = r.session_id ?? r.sessionId;
+    const sid = sidRaw != null && String(sidRaw).trim() ? String(sidRaw).trim() : "";
+    sessionTokenList.push({
+      sessionKey: sk,
+      sessionId: sid || null,
+      totalTokens: Math.round(rowTot),
+      updatedAt: Number(r.updatedAt) || null,
+    });
+  }
+  const sessionTokenTop10 = sessionTokenList
+    .filter((x) => x.totalTokens > 0)
+    .sort((a, b) => b.totalTokens - a.totalTokens)
+    .slice(0, 10);
+
+  const COST_DIM_TOP = 10;
+  const userTokenTop10 = [...userTokenMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, COST_DIM_TOP)
+    .map(([name, value]) => ({ name, value: Math.round(value) }));
+  const channelTokenTop10 = [...channelTokenMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, COST_DIM_TOP)
+    .map(([name, value]) => ({ name, value: Math.round(value) }));
+
+  const modelEntries = [...modelTokenMap.entries()].sort((a, b) => b[1] - a[1]);
+  const MODEL_PIE_MAX = 8;
+  /** @type {{ name: string, value: number }[]} */
+  let modelTokenPie = [];
+  if (modelEntries.length > 0) {
+    const head = modelEntries.slice(0, MODEL_PIE_MAX);
+    const tail = modelEntries.slice(MODEL_PIE_MAX);
+    const tailSum = tail.reduce((s, [, v]) => s + v, 0);
+    modelTokenPie = head.map(([name, value]) => ({ name, value: Math.round(value) }));
+    if (tailSum > 0) modelTokenPie.push({ name: "__other__", value: Math.round(tailSum) });
+  }
+
+  const dailyTokensAvg =
+    totalTokensFinal > 0 && billingDays > 0 ? Math.round(totalTokensFinal / billingDays) : null;
+  /** 每次会话的 Token 消耗（input+output）求算术平均：Σ(单会话Token) ÷ 会话条数 */
+  const perSessionTotals = sessionTokenList.map((x) => x.totalTokens);
+  const sessionCountForAvg = sessionRows.length;
+  const sumTokensPerSessionLoop = perSessionTotals.reduce((s, t) => s + t, 0);
+  const avgTokensPerSession =
+    sessionCountForAvg > 0 ? Math.round(sumTokensPerSessionLoop / sessionCountForAvg) : null;
+  const maxTokensPerSession =
+    perSessionTotals.length > 0 ? Math.round(Math.max(...perSessionTotals)) : null;
+  const inputOutputPie =
+    totalTokensFinal > 0
+      ? [
+          { name: "input", value: inputTokensFinal },
+          { name: "output", value: outputTokensFinal },
+        ]
+      : [];
+
   const avgRuntimeMs =
     sessionRows.length > 0
       ? Math.round(
@@ -345,6 +494,111 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
             sessionRows.length,
         )
       : null;
+
+  let successSessionCount = 0;
+  let failedSessionCount = 0;
+  const userSessionMap = new Map();
+  const channelSessionMap = new Map();
+  for (const r of sessionRows) {
+    if (r.abortedLastRun) failedSessionCount += 1;
+    else successSessionCount += 1;
+    const userLabel =
+      r.label != null && String(r.label).trim()
+        ? String(r.label).trim()
+        : r.originLabel != null && String(r.originLabel).trim()
+          ? String(r.originLabel).trim()
+          : "";
+    const uKey = userLabel || "__unknown__";
+    userSessionMap.set(uKey, (userSessionMap.get(uKey) ?? 0) + 1);
+    const chRaw = r.lastChannel ?? r.channel;
+    const chLabel = chRaw != null && String(chRaw).trim() ? String(chRaw).trim() : "";
+    const cKey = chLabel || "__unknown__";
+    channelSessionMap.set(cKey, (channelSessionMap.get(cKey) ?? 0) + 1);
+  }
+
+  const sessionExecTrend = trendDaily.map((d) => ({
+    day: d.day,
+    sessions: d.sessions,
+    avgDurationMs: d.durationN > 0 ? Math.round(d.durationSum / d.durationN) : null,
+  }));
+
+  const SESSION_EXEC_PIE_MAX = 8;
+  const sessionStatusPie =
+    sessionRows.length > 0
+      ? [
+          { name: "success", value: successSessionCount },
+          { name: "failed", value: failedSessionCount },
+        ].filter((x) => x.value > 0)
+      : [];
+
+  const userSessionEntries = [...userSessionMap.entries()].sort((a, b) => b[1] - a[1]);
+  const USER_SESSION_TREND_STACK = 8;
+  const headUserEntries = userSessionEntries.slice(0, USER_SESSION_TREND_STACK);
+  const headUserKeySet = new Set(headUserEntries.map(([k]) => k));
+  const userSessionTrendDaily = trendDaily.map((d) => {
+    const bDay = byDay.get(d.day);
+    const um = bDay?.userByKey || new Map();
+    /** @type {Record<string, unknown>} */
+    const row = { day: d.day };
+    headUserEntries.forEach(([k], i) => {
+      row[`u${i}`] = um.get(k) ?? 0;
+    });
+    let uOther = 0;
+    for (const [k, v] of um) {
+      if (!headUserKeySet.has(k)) uOther += v;
+    }
+    row.uOther = uOther;
+    return row;
+  });
+  /** @type {{ key: string; name: string }[]} */
+  const userSessionTrendSeries = [
+    ...headUserEntries.map(([name], i) => ({ key: `u${i}`, name })),
+    { key: "uOther", name: "__other__" },
+  ];
+  /** @type {{ name: string; value: number }[]} */
+  let userSessionPie = [];
+  if (userSessionEntries.length > 0) {
+    const head = userSessionEntries.slice(0, SESSION_EXEC_PIE_MAX);
+    const tail = userSessionEntries.slice(SESSION_EXEC_PIE_MAX);
+    const tailSum = tail.reduce((s, [, v]) => s + v, 0);
+    userSessionPie = head.map(([name, value]) => ({ name, value }));
+    if (tailSum > 0) userSessionPie.push({ name: "__other__", value: tailSum });
+  }
+
+  const channelSessionEntries = [...channelSessionMap.entries()].sort((a, b) => b[1] - a[1]);
+  /** @type {{ name: string; value: number }[]} */
+  let channelSessionPie = [];
+  if (channelSessionEntries.length > 0) {
+    const head = channelSessionEntries.slice(0, SESSION_EXEC_PIE_MAX);
+    const tail = channelSessionEntries.slice(SESSION_EXEC_PIE_MAX);
+    const tailSum = tail.reduce((s, [, v]) => s + v, 0);
+    channelSessionPie = head.map(([name, value]) => ({ name, value }));
+    if (tailSum > 0) channelSessionPie.push({ name: "__other__", value: tailSum });
+  }
+
+  const CHANNEL_TREND_STACK = 8;
+  const headChannelEntries = channelSessionEntries.slice(0, CHANNEL_TREND_STACK);
+  const headChannelKeySet = new Set(headChannelEntries.map(([k]) => k));
+  const channelSessionTrendDaily = trendDaily.map((d) => {
+    const bDay = byDay.get(d.day);
+    const cm = bDay?.channelByKey || new Map();
+    /** @type {Record<string, unknown>} */
+    const row = { day: d.day };
+    headChannelEntries.forEach(([k], i) => {
+      row[`c${i}`] = cm.get(k) ?? 0;
+    });
+    let cOther = 0;
+    for (const [k, v] of cm) {
+      if (!headChannelKeySet.has(k)) cOther += v;
+    }
+    row.cOther = cOther;
+    return row;
+  });
+  /** @type {{ key: string; name: string }[]} */
+  const channelSessionTrendSeries = [
+    ...headChannelEntries.map(([name], i) => ({ key: `c${i}`, name })),
+    { key: "cOther", name: "__other__" },
+  ];
 
   const capabilityParts = [
     modelMeta?.provider ? 95 : 45,
@@ -521,6 +775,150 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
     headerSessionKey = headerSessionKeys[0];
   }
 
+  /** 安全与风险 Tab：由会话行与质量明细派生（细粒度审计以会话/工具聚合为主） */
+  const riskByDayMap = new Map();
+  let riskSessionTotalForTab = 0;
+  let todayRiskSessionCountForTab = 0;
+  const todayDkTab = dayKeyFromMs(Date.now());
+  for (const r of rowsForTimeline) {
+    const rh = Number(r.riskHigh) || 0;
+    const rm = Number(r.riskMedium) || 0;
+    const rl = Number(r.riskLow) || 0;
+    const execN = Number(r.execCommandErrorCount) || 0;
+    if (rh + rm + rl <= 0 && execN <= 0) continue;
+    riskSessionTotalForTab += 1;
+    const tMs = Number(r.endedAt) || Number(r.updatedAt);
+    const dk = Number.isFinite(tMs) ? dayKeyFromMs(tMs) : null;
+    if (dk === todayDkTab) todayRiskSessionCountForTab += 1;
+    if (dk) {
+      if (!riskByDayMap.has(dk)) riskByDayMap.set(dk, { day: dk, riskSessions: 0, riskEvents: 0 });
+      const b = riskByDayMap.get(dk);
+      b.riskSessions += 1;
+      b.riskEvents += rh + rm + rl + execN;
+    }
+  }
+  const riskDailySortedTab = [...riskByDayMap.values()].sort((a, b) => a.day.localeCompare(b.day));
+  const last7RiskTab = riskDailySortedTab.slice(-7);
+  let riskTrend7d = "flat";
+  if (last7RiskTab.length >= 2) {
+    const half = Math.floor(last7RiskTab.length / 2) || 1;
+    const firstHalf = last7RiskTab.slice(0, half).reduce((s, x) => s + x.riskEvents, 0);
+    const secondHalf = last7RiskTab.slice(half).reduce((s, x) => s + x.riskEvents, 0);
+    if (secondHalf > firstHalf * 1.05) riskTrend7d = "up";
+    else if (secondHalf < firstHalf * 0.95) riskTrend7d = "down";
+  }
+
+  const qdet = ctx.qualityDetails || {};
+  const execErrListTab = Array.isArray(qdet.execErrorRows) ? qdet.execErrorRows : [];
+  const toolErrListTab = Array.isArray(qdet.toolErrorRows) ? qdet.toolErrorRows : [];
+
+  /** @type {object[]} */
+  const riskRecordsTab = [];
+  for (const r of rowsForTimeline) {
+    const rh = Number(r.riskHigh) || 0;
+    const rm = Number(r.riskMedium) || 0;
+    const rl = Number(r.riskLow) || 0;
+    const execN = Number(r.execCommandErrorCount) || 0;
+    if (rh + rm + rl <= 0 && execN <= 0) continue;
+    const sidRaw = r.session_id ?? r.sessionId;
+    const sid = sidRaw != null && String(sidRaw).trim() ? String(sidRaw).trim() : null;
+    const sk = r.sessionKey != null && String(r.sessionKey).trim() ? String(r.sessionKey).trim() : "";
+    const ts = Number(r.updatedAt) || Number(r.endedAt) || null;
+    let level = "low";
+    let typeKey = "marker";
+    if (execN > 0) {
+      typeKey = "sensitive_cmd";
+      level = rh > 0 ? "high" : rm > 0 ? "medium" : "medium";
+    } else if (rh > 0) {
+      typeKey = "external";
+      level = "high";
+    } else if (rm > 0) {
+      typeKey = "abnormal_access";
+      level = "medium";
+    } else if (rl > 0) {
+      typeKey = "low_marker";
+      level = "low";
+    }
+    riskRecordsTab.push({
+      ts,
+      level,
+      typeKey,
+      sessionId: sid,
+      sessionKey: sk || null,
+      taskId: null,
+      description: `风险事件：高 ${rh} / 中 ${rm} / 低 ${rl}${execN > 0 ? `；exec/shell 异常 ${execN}` : ""}`,
+      rulePolicy: "会话风险扫描 · 工具执行策略",
+      disposition: "pending",
+      source: String(r.label ?? r.lastChannel ?? r.channel ?? "—"),
+    });
+  }
+  riskRecordsTab.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
+
+  /** @type {object[]} */
+  const sensitiveAuditTab = [];
+  for (const row of execErrListTab) {
+    sensitiveAuditTab.push({
+      ts: Number(row.updatedAt) || null,
+      category: "exec_shell",
+      content: String(row.detail ?? "exec/shell 失败"),
+      sourceIp: null,
+      needsConfirmation: true,
+      approvalPassed: null,
+      result: "blocked_or_error",
+      sessionId: row.sessionId ?? null,
+      sessionKey: row.sessionKey ?? null,
+    });
+  }
+  for (const row of toolErrListTab) {
+    sensitiveAuditTab.push({
+      ts: Number(row.updatedAt) || null,
+      category: "tool_result",
+      content: String(row.detail ?? "toolResult.isError"),
+      sourceIp: null,
+      needsConfirmation: false,
+      approvalPassed: null,
+      result: "error",
+      sessionId: row.sessionId ?? null,
+      sessionKey: row.sessionKey ?? null,
+      count: row.count,
+    });
+  }
+  sensitiveAuditTab.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
+
+  const securityRiskTabBundle = {
+    overview: {
+      riskSessionTotal: riskSessionTotalForTab,
+      todayRiskSessionCount: todayRiskSessionCountForTab,
+      trend7d: riskTrend7d,
+      p0Count: riskHighCountFinal,
+      p1Count: riskMediumCountFinal,
+      p2p3Count: riskLowCountFinal,
+      compliance: {
+        unauthorizedOps: execErrCnt,
+        sensitiveCommandBlocks: Number(hints.gatewayDenyCommandsCount) || 0,
+        highRiskUnapproved: null,
+      },
+    },
+    riskDaily: last7RiskTab,
+    riskRecords: riskRecordsTab.slice(0, 500),
+    sensitiveAudit: sensitiveAuditTab.slice(0, 120),
+    policy: {
+      execSecurity: hints.execSecurity ?? null,
+      execAsk: hints.execAsk ?? null,
+      fsWorkspaceOnly: hints.fsWorkspaceOnly,
+      channelGroupPolicy: hints.channelGroupPolicy ?? null,
+      gatewayAuthMode: hints.gatewayAuthMode ?? null,
+      gatewayDenyCommandsCount: hints.gatewayDenyCommandsCount ?? null,
+      gatewayDenyCommandsList: Array.isArray(hints.gatewayDenyCommandsList) ? hints.gatewayDenyCommandsList : [],
+      elevatedAllowFrom: hints.elevatedAllowFromSummary ?? null,
+      sandboxMode: hints.sandboxMode ?? null,
+      workspaceDefault: hints.workspaceDefault ?? null,
+      openclawPath: hints.openclawPath ?? null,
+      subagentsMaxConcurrent: hints.subagentsMaxConcurrent ?? null,
+      modelCatalogCount: Array.isArray(hints.modelCatalog) ? hints.modelCatalog.length : 0,
+    },
+  };
+
   return {
     l1: {
       headline: `${agent.agentName} 在窗口内共 ${agent.sessionCount} 次会话，综合健康 ${agent.healthOverall ?? "—"}。`,
@@ -638,6 +1036,226 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
           { key: "efficiency_per_cost", label: "单位成本产出（估）", value: efficiencyPerCost ?? "—" },
         ],
       },
+      taskExecution: {
+        charts: {
+          successRate: agent.successRate,
+          sessionTotal: agent.sessionCount,
+          successSessions: Math.max(0, (Number(agent.sessionCount) || 0) - (Number(agent.abortedCount) || 0)),
+          abortedSessions: Number(agent.abortedCount) || 0,
+          toolUseCount: toolUseCnt,
+          toolErrorCount: toolErrCnt,
+          execCommandErrorCount: execErrCnt,
+          p95Ms: agent.p95DurationMs,
+          avgRuntimeMs,
+          avgToolDurationMs: avgToolDuration,
+          sessionExecutionDaily: trendDaily.map((d) => ({
+            day: d.day,
+            success: d.success,
+            aborted: d.aborted,
+            sessions: d.sessions,
+          })),
+          toolTop10: uniqueTools.slice(0, 10).map((name) => ({
+            name: name.length > 36 ? `${name.slice(0, 36)}…` : name,
+            count: toolFreq.get(name) ?? 0,
+          })),
+          skillTop10: uniqueSkills.slice(0, 10).map((name) => ({
+            name: name.length > 36 ? `${name.slice(0, 36)}…` : name,
+            count: skillFreq.get(name) ?? 0,
+          })),
+        },
+        metrics: [],
+      },
+      toolExecution: (() => {
+        const toolMentionSum = [...toolFreq.values()].reduce((s, v) => s + (Number(v) || 0), 0);
+        const toolTop15 = uniqueTools.slice(0, 15).map((name) => {
+          const c = toolFreq.get(name) ?? 0;
+          return {
+            name: name.length > 40 ? `${name.slice(0, 40)}…` : name,
+            count: c,
+            sharePct:
+              toolMentionSum > 0 ? Math.round(((c / toolMentionSum) * 1000) / 10) : null,
+          };
+        });
+        const teRows = Array.isArray(ctx.qualityDetails?.toolErrorRows) ? ctx.qualityDetails.toolErrorRows : [];
+        const toolOutcomePie =
+          toolUseCnt > 0
+            ? [
+                { name: "success", value: Math.max(0, toolUseCnt - toolErrCnt) },
+                { name: "error", value: Math.max(0, toolErrCnt) },
+              ].filter((x) => x.value > 0)
+            : [];
+        const sessionsN = sessionRows.length;
+        const toolCallsPerSession =
+          sessionsN > 0 ? Math.round((toolUseCnt / sessionsN) * 100) / 100 : null;
+        return {
+          charts: {
+            toolUseCount: toolUseCnt,
+            toolErrorCount: toolErrCnt,
+            toolErrorRatePct,
+            avgToolDurationMs: avgToolDuration,
+            toolDurationSampleCount: Number.isFinite(Number(ctx.toolDurationSampleCount))
+              ? Number(ctx.toolDurationSampleCount)
+              : 0,
+            distinctToolCount: uniqueTools.length,
+            toolCallsPerSession,
+            toolTrendDaily,
+            toolOutcomePie,
+            toolTop15,
+            toolErrorSessions: teRows.slice(0, 30),
+          },
+          metrics: [],
+        };
+      })(),
+      skillSituation: (() => {
+        const skillMentionSum = [...skillFreq.values()].reduce((s, v) => s + (Number(v) || 0), 0);
+        const sessionsWithSkillCount = sessionRows.reduce(
+          (n, r) => n + (collectSkillEntries(r).length > 0 ? 1 : 0),
+          0,
+        );
+        const skillTop15 = uniqueSkills.slice(0, 15).map((name) => {
+          const c = skillFreq.get(name) ?? 0;
+          return {
+            name: name.length > 40 ? `${name.slice(0, 40)}…` : name,
+            count: c,
+            sharePct:
+              skillMentionSum > 0 ? Math.round(((c / skillMentionSum) * 1000) / 10) : null,
+          };
+        });
+        const SKILL_MIX_PIE_MAX = 8;
+        const skillEntriesSorted = [...skillFreq.entries()].sort((a, b) => b[1] - a[1]);
+        /** @type {{ name: string; value: number }[]} */
+        let skillMixPie = [];
+        if (skillEntriesSorted.length > 0) {
+          const head = skillEntriesSorted.slice(0, SKILL_MIX_PIE_MAX);
+          const tail = skillEntriesSorted.slice(SKILL_MIX_PIE_MAX);
+          const tailSum = tail.reduce((s, [, v]) => s + v, 0);
+          skillMixPie = head.map(([name, value]) => ({
+            name: name.length > 22 ? `${name.slice(0, 22)}…` : name,
+            value: Math.round(Number(value) || 0),
+          }));
+          if (tailSum > 0) skillMixPie.push({ name: "__other__", value: Math.round(tailSum) });
+        }
+        const sessionsN = sessionRows.length;
+        const avgSkillMentionsPerSession =
+          sessionsN > 0 ? Math.round((skillMentionSum / sessionsN) * 100) / 100 : null;
+        const skillCoveragePct =
+          sessionsN > 0
+            ? Math.round((sessionsWithSkillCount / sessionsN) * 1000) / 10
+            : null;
+        return {
+          charts: {
+            skillMentionTotal: skillMentionSum,
+            distinctSkillCount: uniqueSkills.length,
+            sessionsWithSkillCount,
+            sessionTotal: sessionsN,
+            avgSkillMentionsPerSession,
+            skillCoveragePct,
+            skillTrendDaily,
+            skillTop15,
+            skillMixPie,
+          },
+          metrics: [],
+        };
+      })(),
+      userPortrait: (() => {
+        const totalSess = sessionRows.length;
+        const unknownN = userSessionMap.get("__unknown__") ?? 0;
+        const knownIdentifiedPct =
+          totalSess > 0 ? Math.round(((totalSess - unknownN) / totalSess) * 1000) / 10 : null;
+        const top1 = userSessionEntries[0];
+        const topUserSharePct =
+          top1 && totalSess > 0 ? Math.round((top1[1] / totalSess) * 1000) / 10 : null;
+        let hhi = 0;
+        for (const [, c] of userSessionEntries) {
+          if (totalSess > 0) hhi += (c / totalSess) ** 2;
+        }
+        const userConcentrationHhi = Math.round(hhi * 1000) / 1000;
+        const knownDistinctUsers = [...userSessionMap.keys()].filter((k) => k !== "__unknown__").length;
+        const userTop15 = userSessionEntries.slice(0, 15).map(([name, sc]) => {
+          const tok = Number(userTokenMap.get(name)) || 0;
+          return {
+            name: name.length > 44 ? `${name.slice(0, 44)}…` : name,
+            sessionCount: sc,
+            tokens: Math.round(tok),
+            sessionSharePct:
+              totalSess > 0 ? Math.round((sc / totalSess) * 1000) / 10 : null,
+          };
+        });
+        return {
+          charts: {
+            sessionTotal: totalSess,
+            distinctUserKeys: userSessionMap.size,
+            knownDistinctUsers,
+            unknownSessionCount: unknownN,
+            knownIdentifiedSessionPct: knownIdentifiedPct,
+            topUserSharePct,
+            userConcentrationHhi,
+            userSessionPie,
+            userTop15,
+            userSessionTrendDaily,
+            userSessionTrendSeries,
+          },
+          metrics: [],
+        };
+      })(),
+      channelAccess: (() => {
+        const totalSess = sessionRows.length;
+        const unknownCh = channelSessionMap.get("__unknown__") ?? 0;
+        const knownChPct =
+          totalSess > 0 ? Math.round(((totalSess - unknownCh) / totalSess) * 1000) / 10 : null;
+        const top1Ch = channelSessionEntries[0];
+        const topChannelSharePct =
+          top1Ch && totalSess > 0 ? Math.round((top1Ch[1] / totalSess) * 1000) / 10 : null;
+        let hhiCh = 0;
+        for (const [, c] of channelSessionEntries) {
+          if (totalSess > 0) hhiCh += (c / totalSess) ** 2;
+        }
+        const channelConcentrationHhi = Math.round(hhiCh * 1000) / 1000;
+        const knownDistinctChannels = [...channelSessionMap.keys()].filter((k) => k !== "__unknown__").length;
+        const channelTop15 = channelSessionEntries.slice(0, 15).map(([name, sc]) => {
+          const tok = Number(channelTokenMap.get(name)) || 0;
+          return {
+            name: name.length > 44 ? `${name.slice(0, 44)}…` : name,
+            sessionCount: sc,
+            tokens: Math.round(tok),
+            sessionSharePct:
+              totalSess > 0 ? Math.round((sc / totalSess) * 1000) / 10 : null,
+          };
+        });
+        return {
+          charts: {
+            sessionTotal: totalSess,
+            distinctChannelKeys: channelSessionMap.size,
+            knownDistinctChannels,
+            unknownChannelSessions: unknownCh,
+            knownChannelSessionPct: knownChPct,
+            topChannelSharePct: topChannelSharePct,
+            channelConcentrationHhi,
+            channelSessionPie,
+            channelTop15,
+            channelTrendDaily,
+            channelSessionTrendDaily,
+            channelSessionTrendSeries,
+          },
+          metrics: [],
+        };
+      })(),
+      sessionExecution: {
+        charts: {
+          sessionTotal: sessionRows.length,
+          successRate:
+            sessionRows.length > 0
+              ? Math.round((successSessionCount / sessionRows.length) * 1000) / 1000
+              : null,
+          failedSessions: failedSessionCount,
+          avgSessionDurationMs: avgRuntimeMs,
+          sessionTrend: sessionExecTrend,
+          sessionStatusPie,
+          userSessionPie,
+          channelSessionPie,
+        },
+        metrics: [],
+      },
       cost: {
         charts: {
           kpiScore: costScore,
@@ -647,6 +1265,15 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
           tokenRatio,
           tokenRatioSampleCount: inputTokensFinal > 0 || outputTokensFinal > 0 ? Math.max(1, sessionRows.length) : 0,
           totalTokens: totalTokensFinal,
+          dailyTokensAvg,
+          avgTokensPerSession,
+          maxTokensPerSession,
+          tokenTrendDaily,
+          inputOutputPie,
+          modelTokenPie,
+          userTokenTop10,
+          channelTokenTop10,
+          sessionTokenTop10,
         },
         metrics: [
           { key: "kpi_score", label: "综合评分(KPI)", value: costScore },
@@ -685,6 +1312,7 @@ export function buildEmployeeProfileDetail(agent, sessionRows, ctx) {
           },
         ],
       },
+      securityRisk: securityRiskTabBundle,
     },
     qualityDetails: {
       abortedRows: Array.isArray(ctx.qualityDetails?.abortedRows) ? ctx.qualityDetails.abortedRows : [],

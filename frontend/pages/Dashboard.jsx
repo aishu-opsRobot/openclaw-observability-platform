@@ -4,7 +4,6 @@ import intl from "react-intl-universal";
 import Icon from "../components/Icon.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import LanguageSwitch from "../components/LanguageSwitch.jsx";
-import DigitalEmployeeOverview from "./digital-employee/DigitalEmployeeOverview.jsx";
 import DigitalEmployeePortrait from "./digital-employee/DigitalEmployeePortrait.jsx";
 import CostAnalysis from "./CostAnalysis.jsx";
 import CostOverview2 from "./CostOverview2.jsx";
@@ -20,7 +19,6 @@ import MonitorDashboard from "./monitor-dashboard/index.jsx";
 
 const PAGE_META_KEYS = {
   panorama: { title: "page.panorama.title", subtitle: "page.panorama.subtitle" },
-  "digital-employee-overview": { title: "page.digitalEmployeeOverview.title", subtitle: "page.digitalEmployeeOverview.subtitle" },
   "digital-employee-list": { title: "page.digitalEmployeeList.title", subtitle: "page.digitalEmployeeList.subtitle" },
   monitoring: { title: "page.monitoring.title", subtitle: "page.monitoring.subtitle" },
   alerts: { title: "page.alerts.title", subtitle: "page.alerts.subtitle" },
@@ -49,8 +47,7 @@ const NAV_KEYS = [
       { id: "otel-overview", labelKey: "nav.otelOverview" },
       { id: "instance-monitoring", labelKey: "nav.instanceMonitoring" },
       { id: "config-change", labelKey: "nav.configChange" },
-      // 数字员工：独立模块入口，数据来自 /api/digital-employees/* 版本 1.0.1
-      { id: "digital-employee-overview", labelKey: "nav.digitalEmployeeOverview" },
+      // 数字员工：数据来自 /api/digital-employees/* 版本 1.0.1
       { id: "digital-employee-list", labelKey: "nav.digitalEmployeeList" },
     ],
   },
@@ -262,6 +259,10 @@ export default function Dashboard() {
       localStorage.setItem("nav-active", "audit-overview");
       return "audit-overview";
     }
+    if (v === "digital-employee-overview") {
+      localStorage.setItem("nav-active", "digital-employee-list");
+      return "digital-employee-list";
+    }
     return v || "audit-overview";
   });
   const [navGroupOpen, setNavGroupOpenRaw] = useState(() => {
@@ -290,8 +291,9 @@ export default function Dashboard() {
   // 数字员工概览「查看画像」等跨页跳转（CustomEvent），版本 1.0.1
   useEffect(() => {
     const onNav = (e) => {
-      const id = e?.detail?.id;
+      let id = e?.detail?.id;
       if (!id || typeof id !== "string") return;
+      if (id === "digital-employee-overview") id = "digital-employee-list";
       setActiveNavRaw(id);
       localStorage.setItem("nav-active", id);
       setSidebarOpen(false);
@@ -607,8 +609,6 @@ export default function Dashboard() {
             <AgentCostDetail />
           ) : activeNav === "llm-cost" ? (
             <LlmCost />
-          ) : activeNav === "digital-employee-overview" ? (
-            <DigitalEmployeeOverview />
           ) : activeNav === "digital-employee-list" ? (
             <DigitalEmployeePortrait />
           ) : activeNav === "config-change" ? (

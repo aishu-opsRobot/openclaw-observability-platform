@@ -206,6 +206,7 @@ export function mapAgentSessionRow(raw) {
     execCount: pickNum(raw, ["exec_count", "execCount"]) ?? 0,
     _source: "doris",
     _doris: raw,
+    groupId: raw.group_id != null && String(raw.group_id).trim() ? String(raw.group_id).trim() : null,
   };
 }
 

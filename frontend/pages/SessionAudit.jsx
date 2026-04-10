@@ -1424,7 +1424,7 @@ export default function SessionAudit({ setHeaderExtra }) {
   const [query, setQuery] = useState("");
   const [detailRow, setDetailRow] = useState(null);
 
-  // 数字员工画像下钻：预填搜索（读取一次即清除），版本 1.0.1
+  // 数字员工下钻：预填搜索（读取一次即清除），版本 1.0.1
   useEffect(() => {
     try {
       const v = sessionStorage.getItem("openclaw-session-audit-query");
