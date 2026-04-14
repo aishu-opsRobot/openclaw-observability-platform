@@ -193,8 +193,47 @@ sources:
 ```bash
 vector --config vector.yaml
 ```
+### 5.配置 OpenClaw-Diagnostics-Otel 数据采集
 
-### 5.查看 OpenClaw 的所有观测数据：
+* [官方文档介绍](https://docs.openclaw.ai/zh-CN/logging)
+
+在openclaw.json文件需要增加或者修改配置如下：
+```yaml
+{
+  "diagnostics": {
+    "enabled": true,
+    "otel": {
+      "enabled": true,
+      "endpoint": "http://192.168.72.87:4318",
+      "traces": true,
+      "metrics": true,
+      "logs": true,
+    },
+    "cacheTrace": {
+      "enabled": true,
+      "includeMessages": true,
+      "includePrompt": true,
+      "includeSystem": true
+    }
+  },
+  "plugins": {
+    "entries": {
+      "diagnostics-otel": {
+        "enabled": true
+      },
+    },
+    "allow": [
+      "diagnostics-otel",
+    ]
+  }
+}
+```
+修改配置完成后，需要 重启openclaw：
+```bash
+openclaw gataway restart
+```
+
+### 6.查看 OpenClaw 的所有观测数据：
 
 * 在 OpenClaw 界面进行对话互动
 * 在 opsRobot 产品界面中查看采集数据：http://localhost:3000
