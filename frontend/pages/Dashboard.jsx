@@ -14,7 +14,7 @@ import OpenClawInstance from "./OpenClawInstance.jsx";
 import InstanceMonitoring from "./InstanceMonitoring.jsx";
 import SessionAudit from "./SessionAudit.jsx";
 import AuditOverview from "./AuditOverview.jsx";
-import SreAgent from "./SreAgent.jsx";
+import SreAgent from "./sre-agent/index.jsx";
 import LogSearch from "./LogSearch.jsx";
 import MonitorDashboard from "./monitor-dashboard/index.jsx";
 

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { EventType, uid } from "./agui.js";
+import { normalizeConfirmPayload, parseAssistantConfirmSources } from "./aguiConfirmBlock.js";
 
 /**
  * useAgui — React hook for AG-UI event stream processing.
@@ -113,9 +114,13 @@ export default function useAgui(agent) {
       }
       case EventType.TEXT_MESSAGE_END: {
         const id = event.messageId;
+        const raw = msgBufRef.current[id] ?? "";
+        const { cleanText, confirmPayload } = parseAssistantConfirmSources(raw, () => uid("cfm"));
+        msgBufRef.current[id] = cleanText;
         setMessages((prev) =>
-          prev.map((m) => (m.id === id ? { ...m, streaming: false } : m)),
+          prev.map((m) => (m.id === id ? { ...m, content: cleanText, streaming: false } : m)),
         );
+        if (confirmPayload) setConfirm(confirmPayload);
         break;
       }
 
@@ -158,7 +163,15 @@ export default function useAgui(agent) {
         setAgentState((prev) => applyJsonPatch(prev, event.delta));
         break;
       case EventType.MESSAGES_SNAPSHOT:
-        setMessages(event.messages.map((m) => ({ ...m, streaming: false })));
+        setMessages(
+          event.messages.map((m) => {
+            const base = { ...m, streaming: false };
+            if (m.role === "assistant" && typeof m.content === "string") {
+              return { ...base, content: parseAssistantConfirmSources(m.content, () => uid("hist")).cleanText };
+            }
+            return base;
+          }),
+        );
         break;
 
       // ── Custom: workspace + confirm + A2UI ─────────────────
@@ -166,7 +179,8 @@ export default function useAgui(agent) {
         if (event.name === "workspace") {
           handleWorkspaceEvent(event.value);
         } else if (event.name === "confirm") {
-          setConfirm(event.value);
+          const normalized = normalizeConfirmPayload(event.value, () => uid("cfm"));
+          if (normalized) setConfirm(normalized);
         } else if (event.name === "surfaceUpdate") {
           handleSurfaceUpdate(event.value);
         } else if (event.name === "dataModelUpdate") {
@@ -273,12 +287,19 @@ export default function useAgui(agent) {
     setError(null);
     setStatus("idle");
     setMessages(
-      (list || []).map((m) => ({
-        id: m.id ?? uid("hist"),
-        role: m.role === "user" || m.role === "assistant" ? m.role : "user",
-        content: String(m.content ?? ""),
-        streaming: false,
-      })),
+      (list || []).map((m) => {
+        const role = m.role === "user" || m.role === "assistant" ? m.role : "user";
+        let content = String(m.content ?? "");
+        if (role === "assistant") {
+          content = parseAssistantConfirmSources(content, () => uid("hist")).cleanText;
+        }
+        return {
+          id: m.id ?? uid("hist"),
+          role,
+          content,
+          streaming: false,
+        };
+      }),
     );
   }, []);
 

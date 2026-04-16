@@ -8,7 +8,7 @@
 
 | 层级 | 职责 |
 |------|------|
-| **前端 UI** | `frontend/pages/SreAgent.jsx`：左侧对话、Agent 选择、思考链、Markdown；`WorkspaceRenderer`：右侧工作区面板 |
+| **前端 UI** | `frontend/pages/sre-agent/index.jsx`（编排）与 `frontend/pages/sre-agent/components/*`（落地页、会话侧栏、聊天工作区等）：左侧对话、Agent 选择、思考链、Markdown；`WorkspaceRenderer`：右侧工作区面板 |
 | **AG-UI 客户端** | `frontend/lib/agui.js` 中 `HttpAgent`：`POST /api/sre-agent`，读取 **SSE**，解析为 AG-UI 事件 |
 | **状态机** | `frontend/lib/useAgui.js`：将事件聚合为 `messages` / `steps` / `workspacePanels` / `agentState` 等 |
 | **Node 桥接** | `backend/sre-agent/sre-agent-handler.mjs`：HTTP → SSE；`backend/sre-agent/openclaw-client.mjs` 中 `runSreAgent` |
@@ -111,7 +111,7 @@ flowchart LR
 
 | 模块 | 路径 |
 |------|------|
-| 页面 | `frontend/pages/SreAgent.jsx` |
+| 页面 | `frontend/pages/sre-agent/index.jsx`（`Dashboard.jsx` 由此导入）；子组件 `frontend/pages/sre-agent/components/` |
 | AG-UI 客户端 | `frontend/lib/agui.js` |
 | 事件归约 | `frontend/lib/useAgui.js` |
 | Agent 列表（前端） | `frontend/lib/sreAgentCatalog.js` |

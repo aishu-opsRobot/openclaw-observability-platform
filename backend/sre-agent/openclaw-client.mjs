@@ -16,6 +16,7 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseAssistantConfirmSources } from "../../frontend/lib/aguiConfirmBlock.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -40,7 +41,15 @@ ${loadSkill("prom-query.md")}
 2. 调用工具获取数据
 3. 用结构化格式（Markdown 表格、列表）呈现结果
 4. 给出明确的建议和下一步操作
-5. 高危操作必须先提示风险，等待用户确认`;
+5. 高危操作必须先提示风险，等待用户确认
+6. **人机确认（必须遵守格式）**：当需要用户明确批准再执行变更类操作（扩缩容、删除资源、执行写命令等）时，在正常 Markdown 说明之后，**单独追加**一个 fenced 代码块，语言标记为 \`confirm\`，块内为 **单行或格式化的 JSON**（字段用双引号），且必须包含 \`title\` 与 \`message\`。可选 \`command\`（将展示在确认卡片中）、\`actions\`（按钮数组，每项含 \`id\` / \`label\` / \`variant\`，其中同意按钮的 \`id\` 必须为 \`approve\`）。示例：
+
+\`\`\`confirm
+{"title":"确认执行扩容","message":"将 memory limit 调整为 1Gi","command":"kubectl set resources ...","actions":[{"id":"approve","label":"确认执行","variant":"primary"},{"id":"reject","label":"暂不执行","variant":"secondary"}]}
+\`\`\`
+
+平台会解析该块并弹出左侧确认卡片，同时从用户可见正文中移除该块；不要在 JSON 外夹杂说明文字。
+7. **自然语言邀约确认**：若用中文在回复**末尾**表达「如需…（可含下一步建议，如调用某能力）…请告知 / 请告知。」或「若需…请告知」，平台会将**紧贴文末的整段**识别为同等人机确认（正文保留前半部分，尾部整段进入确认卡片）。`;
 
 // ─── Tool Definitions (OpenAI function calling format) ────────────
 const SRE_TOOLS = [
@@ -562,12 +571,22 @@ async function processStreamResponse(response, emit, config, chatMessages, signa
     }
   }
 
-  // Finalize text message
+  // Finalize text message + optional ```confirm``` → AG-UI CUSTOM confirm
+  let strippedContent = contentBuffer;
   if (messageStarted) {
+    const { cleanText, confirmPayload } = parseAssistantConfirmSources(contentBuffer, () => uid("cfm"));
+    strippedContent = cleanText;
+    if (confirmPayload) {
+      emit({
+        type: EventType.CUSTOM,
+        name: "confirm",
+        value: confirmPayload,
+      });
+    }
     emit({ type: EventType.TEXT_MESSAGE_END, messageId: msgId });
     emit({ type: EventType.STEP_FINISHED, stepName: "生成回复" });
   }
-  _lastContentBuffer = contentBuffer;
+  _lastContentBuffer = strippedContent;
 
   console.log(
     `[sre] ← stream ended | content=${contentBuffer.length} chars | toolCalls=${hasToolCalls} | preview="${contentBuffer.slice(0, 80).replace(/\n/g, "\\n")}…"`
@@ -600,9 +619,12 @@ async function processStreamResponse(response, emit, config, chatMessages, signa
       content: buf.result || "completed",
     }));
 
+    const assistText = messageStarted
+      ? (strippedContent.trim() ? strippedContent : null)
+      : (contentBuffer.trim() ? contentBuffer : null);
     const assistantMsg = {
       role: "assistant",
-      content: contentBuffer || null,
+      content: assistText,
       tool_calls: Object.values(toolCallBuffers).map((buf) => ({
         id: buf.id,
         type: "function",
