@@ -12,7 +12,7 @@
 | **AG-UI 客户端** | `frontend/lib/agui.js` 中 `HttpAgent`：`POST /api/sre-agent`，读取 **SSE**，解析为 AG-UI 事件 |
 | **状态机** | `frontend/lib/useAgui.js`：将事件聚合为 `messages` / `steps` / `workspacePanels` / `agentState` 等 |
 | **Node 桥接** | `backend/sre-agent/sre-agent-handler.mjs`：HTTP → SSE；`backend/sre-agent/openclaw-client.mjs` 中 `runSreAgent` |
-| **OpenClaw** | `POST {OPENCLAW_API_URL}/v1/chat/completions`（流式）；可选 `GET` 系列路径列举 Agent（由 `handleListAgents` 代理） |
+| **OpenClaw** | `POST {OPENCLAW_API_URL}/v1/chat/completions`（流式；**OpenClaw Gateway 默认关闭该 HTTP 端点**，需在网关配置中开启，见下文）；可选 `GET` 系列路径列举 Agent（由 `handleListAgents` 代理） |
 
 前后端之间使用 **AG-UI 事件流**，经 **Server-Sent Events (SSE)** 传输；后端将 OpenClaw 的 **Chat Completions 流式响应** 翻译为 AG-UI 事件。
 
@@ -83,13 +83,25 @@ flowchart LR
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/openclaw/agents` | 与 `GET /api/sre-agent/agents` **等价**，拉取 OpenClaw 已注册 Agent 列表（供下拉框） |
+| GET | `/api/openclaw/sessions` | 会话列表：仅 **`POST /tools/invoke`（`sessions_list`）** + `GET …/status` 兜底，**不**调用 `GET /v1/sessions`；参见 [Tools Invoke API](https://openclawlab.com/en/docs/gateway/tools-invoke-http-api/) |
+| GET | `/api/openclaw/sessions/:key` | 单会话正文：优先 Gateway **聊天历史** `GET /sessions/:key/history`（与 Chat 同源 transcript），失败则 **`sessions_preview`**（`keys: [key]`）与 status 兜底，**不**调用 `GET /v1/sessions/:key` |
 | POST | `/api/sre-agent/action` | A2UI 用户操作上报（当前多为日志/占位） |
 
 ---
 
 ## 5. 环境与部署要点
 
-- **开发**：Vite 插件 `vite-plugins/agentSessionsDevApi.mjs` 将 `/api/*` 路由到上述 handler；根目录 `.env` 通过 `vite.config.js`（`loadEnv`）与 `backend/env-bootstrap.mjs` 注入 `OPENCLAW_API_URL`、`OPENCLAW_API_KEY`、`OPENCLAW_AGENT_ID`、`OPENCLAW_MODEL` 等。
+### OpenClaw Gateway（新版）与 404
+
+若 `OPENCLAW_API_URL` 指向 **Gateway**（常见端口 `18789`），则：
+
+1. **必须先启用** HTTP Chat Completions，否则 `POST /v1/chat/completions` 会返回 **404**（不是「接口被删掉」，而是默认关闭）。在 Gateway 配置中设置：
+   - `gateway.http.endpoints.chatCompletions.enabled` 为 `true`，并重启 Gateway。  
+   官方说明见：[OpenAI Chat Completions（OpenClaw Gateway）](https://openclawlab.com/en/docs/gateway/openai-http-api/)。
+2. **请求体里的 `model`**：应对 Gateway 使用 `openclaw:<agentId>`（或文档中的 `openclaw` / `agent:…`），由 Gateway 路由到你已在 Agent 里配置的 Ollama/模型；**不要**把 Ollama 模型名（如 `qwen2.5:latest`）误填进该字段。本仓库在检测到 Gateway（端口 18789 或 `OPENCLAW_GATEWAY=true`）时会自动把 `model` 设为 `openclaw:<OPENCLAW_AGENT_ID>`，也可用 `OPENCLAW_HTTP_MODEL` 完全覆盖。
+3. **仅直连 Ollama**：将 `OPENCLAW_API_URL` 设为 `http://127.0.0.1:11434`（或你的 Ollama 地址），并设置 `OPENCLAW_GATEWAY=false`，此时 `OPENCLAW_MODEL` 使用具体模型名即可。
+
+- **开发**：Vite 插件 `vite-plugins/agentSessionsDevApi.mjs` 将 `/api/*` 路由到上述 handler；根目录 `.env` 通过 `vite.config.js`（`loadEnv`）与 `backend/env-bootstrap.mjs` 注入 `OPENCLAW_API_URL`、`OPENCLAW_API_KEY`、`OPENCLAW_AGENT_ID`、`OPENCLAW_MODEL`、`OPENCLAW_GATEWAY`、`OPENCLAW_HTTP_MODEL`、`OPENCLAW_CHAT_PATH` 等。
 - **预览 / 独立 API**：`node backend/serveAgentSessionsApi.mjs`（默认端口见 `PORT`，常为 8787）；`vite.config.js` 中 `preview.proxy` 可将 `/api` 转发到该服务。
 - **容器 / Nginx**：示例见仓库根目录 `nginx.conf`，将 `/api/sre-agent` 等代理到后端并保持 SSE 相关头与缓冲关闭。
 

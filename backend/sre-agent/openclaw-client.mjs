@@ -4,7 +4,12 @@
  * 将 AG-UI RunAgentInput 转换为 OpenClaw Chat Completion 请求，
  * 解析 OpenClaw 的 SSE 响应并翻译为 AG-UI 事件流。
  *
- * 兼容 OpenAI Chat Completion SSE 协议（OpenClaw v3.x+ 默认兼容）。
+ * 兼容 OpenAI Chat Completion SSE 协议。
+ *
+ * 说明（OpenClaw 新版 Gateway）：`POST /v1/chat/completions` 由网关提供，但
+ * **默认关闭**，需在配置中设置 `gateway.http.endpoints.chatCompletions.enabled: true`
+ * 并重启 Gateway；否则会返回 **404**。直连 Ollama（如 :11434）时仍走标准
+ * `/v1/chat/completions`，`model` 为具体模型名即可。
  */
 
 // ─── SRE Agent System Prompt ─────────────────────────────────────
@@ -120,12 +125,179 @@ function optionalModelFromEnv() {
 
 function getConfig() {
   const raw = process.env.OPENCLAW_API_URL || "http://localhost:11434";
+  const customChatPathRaw = process.env.OPENCLAW_CHAT_PATH;
+  const chatPath =
+    customChatPathRaw && String(customChatPathRaw).trim()
+      ? `/${String(customChatPathRaw).trim().replace(/^\/+/, "")}`
+      : undefined;
   return {
     baseUrl: raw.replace(/\/+$/, ""),
-    agentId: process.env.OPENCLAW_AGENT_ID || "sre-agent",
+    agentId: process.env.OPENCLAW_AGENT_ID || "sre",
     apiKey: process.env.OPENCLAW_API_KEY || "",
     model: optionalModelFromEnv(),
+    chatPath,
   };
+}
+
+/**
+ * 是否按「OpenClaw Gateway」方式解析 model（与直连 Ollama/OpenAI 区分）。
+ * - 显式：`OPENCLAW_GATEWAY=1|true` 或 `OPENCLAW_GATEWAY=0|false`
+ * - 启发：默认端口 18789 视为 Gateway（与官方文档示例一致）
+ */
+function isOpenClawGatewayBaseUrl(baseUrl) {
+  const g = process.env.OPENCLAW_GATEWAY;
+  if (g === "0" || g === "false" || g === "no") return false;
+  if (g === "1" || g === "true" || g === "yes") return true;
+  try {
+    const u = new URL(baseUrl);
+    if (u.port === "18789") return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/**
+ * 前端新建对话使用 `opsRobot_thread_${Date.now()}_…`（或兼容旧版 `thread_${ts}_…`）作为 threadId；
+ * 续接 OpenClaw 列表会话时为 Gateway 的 session key。
+ * @see https://docs.openclaw.ai/tools/thinking — `/think:`、`/reasoning:` 行内指令
+ */
+function isEphemeralAppThreadId(sessionKey) {
+  const s = String(sessionKey ?? "").trim();
+  return /^thread_\d+_/i.test(s) || /^opsRobot_thread_\d+_/i.test(s);
+}
+
+/**
+ * 新建对话时前端用 `opsRobot_thread_${ts}_…`（或兼容 `thread_${ts}_…`）作为 threadId；发往 Gateway 时映射为
+ * `agent:<agentId>:<原 thread 串>`，既绑定所选 agent，又为每条新会话保留独立 thread 段。
+ */
+function resolveGatewaySessionKeyForChat(sessionKey, agentId) {
+  const sk = sessionKey != null ? String(sessionKey).trim() : "";
+  if (!sk) return "";
+  if (!isEphemeralAppThreadId(sk)) return sk;
+  const aid = agentId != null ? String(agentId).trim() : "";
+  if (!aid) return sk;
+  return `agent:${aid}:${sk}`;
+}
+
+/**
+ * 是否对当前请求注入 OpenClaw 思考 / 推理可见性指令（仅改发往 Gateway 的副本，不写回 AG-UI）。
+ * - 默认：仅对「非应用内临时 thread id」的会话（从 OpenClaw 打开的历史）注入。
+ * - `OPENCLAW_SESSION_THINKING_SCOPE=all`：任意非空 sessionKey（含新建 thread）也注入。
+ */
+function shouldInjectOpenClawSessionDirectives(sessionKey) {
+  const sk = String(sessionKey ?? "").trim();
+  const scope = String(process.env.OPENCLAW_SESSION_THINKING_SCOPE ?? "openclaw_session")
+    .trim()
+    .toLowerCase();
+  if (scope === "off" || scope === "false" || scope === "0") return false;
+  if (!sk) return false;
+  if (scope === "all" || scope === "always") return true;
+  return !isEphemeralAppThreadId(sk);
+}
+
+/** @returns {{ level: string | null }} level 为 null 表示关闭「思考档位」注入 */
+function resolveSessionThinkingLevel() {
+  const raw = process.env.OPENCLAW_SESSION_THINKING_LEVEL;
+  if (raw == null || String(raw).trim() === "") return { level: "high" };
+  const t = String(raw).trim().toLowerCase();
+  if (t === "off" || t === "false" || t === "0" || t === "none") return { level: null };
+  return { level: String(raw).trim() };
+}
+
+/** @returns {{ level: string | null }} on|off|stream；null 表示不注入 /reasoning */
+function resolveSessionReasoningLevel() {
+  const raw = process.env.OPENCLAW_SESSION_REASONING_LEVEL;
+  if (raw == null || String(raw).trim() === "") return { level: "on" };
+  const t = String(raw).trim().toLowerCase();
+  if (t === "off" || t === "false" || t === "0" || t === "none") return { level: null };
+  return { level: String(raw).trim() };
+}
+
+/**
+ * 在发往 OpenClaw Gateway 的 messages 副本上注入 `/think:`、`/reasoning:`（仅最后一条 user，且 tool 续写轮次不注入）。
+ */
+function injectOpenClawSessionChatDirectives(messages, sessionKey, baseUrl) {
+  if (!Array.isArray(messages) || messages.length === 0) return messages;
+  if (!isOpenClawGatewayBaseUrl(baseUrl) || !shouldInjectOpenClawSessionDirectives(sessionKey)) {
+    return messages;
+  }
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "user") return messages;
+
+  const content = typeof last.content === "string" ? last.content : "";
+  if (/^\s*\/(think|t|thinking)\b/i.test(content) || /^\s*\/reasoning\b/i.test(content)) {
+    return messages;
+  }
+
+  const { level: thinkLevel } = resolveSessionThinkingLevel();
+  const { level: reasonLevel } = resolveSessionReasoningLevel();
+  if (!thinkLevel && !reasonLevel) return messages;
+
+  const lines = [];
+  if (thinkLevel) lines.push(`/think:${thinkLevel}`);
+  if (reasonLevel) lines.push(`/reasoning ${reasonLevel}`);
+  const prefix = `${lines.join("\n")}\n\n`;
+
+  const idx = messages.length - 1;
+  const next = [...messages];
+  next[idx] = { ...last, content: `${prefix}${content}` };
+  return next;
+}
+
+/**
+ * HTTP 请求体里的 `model` 字段：
+ * - Gateway：官方约定为 `openclaw/<agentId>`（如 `openclaw/sre`、`openclaw/default`），
+ *   见 https://docs.openclaw.ai/gateway/openai-http-api ；勿把 Ollama 模型名误作 OpenAI model。
+ *   若误发旧式 `openclaw:<id>`（冒号），网关可能无法识别并回退到默认 `main`。
+ * - 直连：使用 `OPENCLAW_MODEL`（如 Ollama 模型名）。
+ * 覆盖：`OPENCLAW_HTTP_MODEL`（非空则优先）。
+ *
+ * 当 `config.agentId` 非空时，会把路由型 model（`openclaw`、`openclaw/…`、`openclaw:…`、`agent/…` 等）
+ * 重写为当前选中的 Agent（仍用斜杠形式）。
+ */
+function resolveHttpModel(config) {
+  const gateway = isOpenClawGatewayBaseUrl(config.baseUrl);
+  const aid = (config.agentId && String(config.agentId).trim()) || "";
+
+  /** Gateway 下把 agent 路由型 model 与当前 agent 对齐（输出统一为 openclaw/<id>） */
+  const alignGatewayAgentRoute = (modelStr) => {
+    const s = String(modelStr ?? "").trim();
+    if (!gateway || !aid) return s;
+    if (/^openclaw$/i.test(s)) return `openclaw/${aid}`;
+    if (/^openclaw(?:[:/])/i.test(s)) return `openclaw/${aid}`;
+    if (/^agent(?:[:/])/i.test(s)) return `agent/${aid}`;
+    return s;
+  };
+
+  const override = process.env.OPENCLAW_HTTP_MODEL;
+  if (override != null && String(override).trim() !== "") {
+    const o = String(override).trim();
+    const out = alignGatewayAgentRoute(o);
+    return out === "" ? undefined : out;
+  }
+
+  const raw = process.env.OPENCLAW_MODEL;
+  const m = raw == null ? "" : String(raw).trim();
+
+  if (gateway) {
+    if (/^openclaw$/i.test(m) || /^openclaw(?:[:/])/i.test(m) || /^agent(?:[:/])/i.test(m)) {
+      const out = alignGatewayAgentRoute(m);
+      return out === "" ? undefined : out;
+    }
+    const fallbackAid = aid || "main";
+    return `openclaw/${fallbackAid}`;
+  }
+
+  return m === "" ? undefined : m;
+}
+
+function chatCompletionsDisabledHint() {
+  return (
+    " OpenClaw Gateway 默认关闭 HTTP Chat Completions（POST /v1/chat/completions），因此会返回 404。" +
+    "请在 Gateway 配置中启用：gateway.http.endpoints.chatCompletions.enabled = true，并重启 Gateway。" +
+    " 若仅想直连 Ollama，请将 OPENCLAW_API_URL 指向 Ollama（如 http://127.0.0.1:11434）并设置 OPENCLAW_GATEWAY=false。"
+  );
 }
 
 // ─── AG-UI Event Types ───────────────────────────────────────────
@@ -147,6 +319,8 @@ const EventType = {
 
 let _counter = 0;
 const uid = (prefix = "id") => `${prefix}_${Date.now()}_${++_counter}`;
+/** 成功使用过的 Chat Completions 路径，避免重复探测 */
+let _chatCompletionsPath = null;
 
 /**
  * 核心：将用户消息发给 OpenClaw，流式返回 AG-UI 事件
@@ -163,11 +337,11 @@ export async function runSreAgent(input, emit, signal) {
       : "";
   const config = { ...envConfig, agentId: reqAgent || envConfig.agentId };
   const runId = uid("run");
-  const threadId = input.threadId || uid("thread");
+  const threadId = input.threadId || uid("opsRobot_thread");
 
   // 如果 agentId 为非默认值，说明连接的是外部 OpenClaw Agent，
   // 不注入本地 SYSTEM_PROMPT / SRE_TOOLS，让 Agent 使用自身技能。
-  const isExternalAgent = config.agentId && config.agentId !== "sre-agent";
+  const isExternalAgent = config.agentId && config.agentId !== "sre";
 
   let hasWorkspacePanel = false;
   const trackedEmit = (event) => {
@@ -192,14 +366,15 @@ export async function runSreAgent(input, emit, signal) {
 
     const tools = isExternalAgent ? [] : SRE_TOOLS;
 
+    const httpModel = resolveHttpModel(config);
     console.log(
-      `[sre-agent] → ${config.baseUrl} | agent=${config.agentId} | model=${config.model || "(default)"} | external=${isExternalAgent} | msgs=${chatMessages.length} | tools=${tools.length}`
+      `[sre] → ${config.baseUrl} | agent=${config.agentId} | httpModel=${httpModel || "(omit)"} | envModel=${config.model || "(none)"} | external=${isExternalAgent} | msgs=${chatMessages.length} | tools=${tools.length}`
     );
 
-    const response = await callOpenClawStream(config, chatMessages, signal, tools);
+    const response = await callOpenClawStream(config, chatMessages, signal, tools, threadId);
     trackedEmit({ type: EventType.STEP_FINISHED, stepName: "理解意图" });
 
-    await processStreamResponse(response, trackedEmit, config, chatMessages, signal);
+    await processStreamResponse(response, trackedEmit, config, chatMessages, signal, threadId);
 
     if (!hasWorkspacePanel) {
       emitFallbackWorkspacePanel(trackedEmit);
@@ -208,7 +383,7 @@ export async function runSreAgent(input, emit, signal) {
     trackedEmit({ type: EventType.RUN_FINISHED, threadId, runId });
   } catch (err) {
     if (err.name === "AbortError") return;
-    console.error("[sre-agent] Error:", err.message);
+    console.error("[sre] Error:", err.message);
     trackedEmit({ type: EventType.RUN_ERROR, message: err.message || String(err) });
   }
 }
@@ -216,8 +391,7 @@ export async function runSreAgent(input, emit, signal) {
 /**
  * 调用 OpenClaw Chat Completion API (SSE streaming)
  */
-async function callOpenClawStream(config, messages, signal, tools = SRE_TOOLS) {
-  const url = `${config.baseUrl}/v1/chat/completions`;
+async function callOpenClawStream(config, messages, signal, tools = SRE_TOOLS, sessionKey) {
   const headers = { "Content-Type": "application/json" };
   if (config.apiKey) {
     headers["Authorization"] = `Bearer ${config.apiKey}`;
@@ -225,33 +399,79 @@ async function callOpenClawStream(config, messages, signal, tools = SRE_TOOLS) {
   if (config.agentId) {
     headers["X-OpenClaw-Agent-Id"] = config.agentId;
   }
+  const rawSk = sessionKey != null ? String(sessionKey).trim() : "";
+  const gatewaySk =
+    rawSk && isOpenClawGatewayBaseUrl(config.baseUrl)
+      ? resolveGatewaySessionKeyForChat(rawSk, config.agentId)
+      : rawSk;
+  if (gatewaySk) {
+    headers["X-OpenClaw-Session-Key"] = gatewaySk;
+  }
+  const ch = process.env.OPENCLAW_MESSAGE_CHANNEL;
+  if (ch != null && String(ch).trim() !== "") {
+    headers["X-OpenClaw-Message-Channel"] = String(ch).trim();
+  }
 
+  const httpModel = resolveHttpModel(config);
+  const messagesOut = injectOpenClawSessionChatDirectives(messages, rawSk, config.baseUrl);
+  const useParallelTools = tools.length > 0 && isOpenClawGatewayBaseUrl(config.baseUrl);
   const body = {
-    ...(config.model ? { model: config.model } : {}),
+    ...(httpModel ? { model: httpModel } : {}),
     ...(config.agentId ? { agent_id: config.agentId } : {}),
-    messages,
+    messages: messagesOut,
     stream: true,
     tools: tools.length > 0 ? tools : undefined,
     tool_choice: tools.length > 0 ? "auto" : undefined,
+    ...(useParallelTools ? { parallel_tool_calls: true } : {}),
   };
 
-  let resp;
-  try {
-    resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal,
-    });
-  } catch (fetchErr) {
-    throw new Error(
-      `无法连接 OpenClaw API (${url})：${fetchErr.cause?.message || fetchErr.message}。请确认 OPENCLAW_API_URL 地址正确且服务已启动。`
-    );
+  const pathCandidates = config.chatPath
+    ? [config.chatPath]
+    : _chatCompletionsPath
+      ? [_chatCompletionsPath]
+      : ["/v1/chat/completions", "/api/v1/chat/completions"];
+
+  let resp = null;
+  let lastError = null;
+  for (const path of pathCandidates) {
+    const url = `${config.baseUrl}${path}`;
+    try {
+      const currentResp = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal,
+      });
+
+      if (currentResp.status === 404 && pathCandidates.length > 1) {
+        lastError = new Error(`OpenClaw API 响应 404: ${url}`);
+        continue;
+      }
+
+      resp = currentResp;
+      _chatCompletionsPath = path;
+      break;
+    } catch (fetchErr) {
+      lastError = new Error(
+        `无法连接 OpenClaw API (${url})：${fetchErr.cause?.message || fetchErr.message}。请确认 OPENCLAW_API_URL 地址正确且服务已启动。`
+      );
+    }
+  }
+
+  if (!resp) {
+    throw lastError || new Error("无法连接 OpenClaw API：未知错误");
   }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    throw new Error(`OpenClaw API 响应 ${resp.status}: ${text || resp.statusText}`);
+    let hint = "";
+    if (resp.status === 404) {
+      hint = chatCompletionsDisabledHint();
+      if (!config.chatPath) {
+        hint += " 也可在 .env 设置 OPENCLAW_CHAT_PATH 指向已启用的兼容端点。";
+      }
+    }
+    throw new Error(`OpenClaw API 响应 ${resp.status}: ${text || resp.statusText}.${hint}`);
   }
 
   return resp;
@@ -262,7 +482,7 @@ let _lastContentBuffer = "";
 /**
  * 解析 OpenClaw SSE 流，翻译为 AG-UI 事件
  */
-async function processStreamResponse(response, emit, config, chatMessages, signal) {
+async function processStreamResponse(response, emit, config, chatMessages, signal, sessionKey) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -350,7 +570,7 @@ async function processStreamResponse(response, emit, config, chatMessages, signa
   _lastContentBuffer = contentBuffer;
 
   console.log(
-    `[sre-agent] ← stream ended | content=${contentBuffer.length} chars | toolCalls=${hasToolCalls} | preview="${contentBuffer.slice(0, 80).replace(/\n/g, "\\n")}…"`
+    `[sre] ← stream ended | content=${contentBuffer.length} chars | toolCalls=${hasToolCalls} | preview="${contentBuffer.slice(0, 80).replace(/\n/g, "\\n")}…"`
   );
 
   // Finalize tool calls & execute them
@@ -394,8 +614,8 @@ async function processStreamResponse(response, emit, config, chatMessages, signa
 
     emit({ type: EventType.STEP_STARTED, stepName: "分析结果", detail: "综合工具输出生成最终回复" });
 
-    const followUpResponse = await callOpenClawStream(config, followUpMessages, signal, []);
-    await processStreamResponse(followUpResponse, emit, config, followUpMessages, signal);
+    const followUpResponse = await callOpenClawStream(config, followUpMessages, signal, [], sessionKey);
+    await processStreamResponse(followUpResponse, emit, config, followUpMessages, signal, sessionKey);
 
     emit({ type: EventType.STEP_FINISHED, stepName: "分析结果" });
   }
@@ -790,4 +1010,4 @@ function makeTerminalPanel(body, title) {
   };
 }
 
-export { getConfig, SYSTEM_PROMPT, SRE_TOOLS };
+export { getConfig, SYSTEM_PROMPT, SRE_TOOLS, isOpenClawGatewayBaseUrl };

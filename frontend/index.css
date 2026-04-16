@@ -237,9 +237,110 @@
 .sre-markdown .x-markdown p:last-child {
   margin-bottom: 0;
 }
-.dark .sre-markdown .x-markdown pre {
-  background: rgba(0, 0, 0, 0.35);
+
+/* 代码块：与正文区分（@ant-design/x-markdown 默认 pre 几乎无底色） */
+.sre-markdown .x-markdown pre {
+  margin: 0.65em 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(229 231 235);
+  background: rgb(249 250 251);
+  color: rgb(31 41 55);
+  font-size: 12px;
+  line-height: 1.55;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
 }
+/* 行内 code（排除 pre 内代码块） */
+.sre-markdown .x-markdown :not(pre) > code,
+.sre-markdown .x-markdown p code,
+.sre-markdown .x-markdown li code,
+.sre-markdown .x-markdown td code,
+.sre-markdown .x-markdown th code,
+.sre-markdown .x-markdown blockquote code {
+  padding: 0.15em 0.45em;
+  margin: 0 0.1em;
+  font-size: 0.88em;
+  border-radius: 0.35rem;
+  border: 1px solid rgb(229 231 235);
+  background: rgb(243 244 246);
+  color: rgb(185 28 28);
+  font-weight: 500;
+}
+
+/* 必须放在行内 code 规则之后，避免 li code 等污染 pre 内 code */
+.sre-markdown .x-markdown pre > code {
+  display: block;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  font-weight: inherit !important;
+  color: inherit !important;
+  border-radius: 0 !important;
+}
+
+/* Markdown 表格 */
+.sre-markdown .x-markdown table:not(pre) {
+  margin: 0.65em 0;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+.sre-markdown .x-markdown table:not(pre) th,
+.sre-markdown .x-markdown table:not(pre) td {
+  border: 1px solid rgb(229 231 235);
+  padding: 0.5em 0.75em;
+}
+.sre-markdown .x-markdown table:not(pre) th {
+  background: rgb(243 244 246);
+  font-weight: 600;
+  color: rgb(55 65 81);
+}
+.sre-markdown .x-markdown table:not(pre) tbody tr:nth-child(even) {
+  background: rgb(249 250 251);
+}
+.sre-markdown .x-markdown table:not(pre) tbody tr:hover {
+  background: rgb(239 246 255);
+}
+
+.dark .sre-markdown .x-markdown pre {
+  border-color: rgb(55 65 81);
+  background: rgb(17 24 39);
+  color: rgb(229 231 235);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+.dark .sre-markdown .x-markdown :not(pre) > code,
+.dark .sre-markdown .x-markdown p code,
+.dark .sre-markdown .x-markdown li code,
+.dark .sre-markdown .x-markdown td code,
+.dark .sre-markdown .x-markdown th code,
+.dark .sre-markdown .x-markdown blockquote code {
+  border-color: rgb(55 65 81);
+  background: rgb(31 41 55);
+  color: rgb(252 165 165);
+}
+.dark .sre-markdown .x-markdown table:not(pre) {
+  border-color: rgb(55 65 81);
+  box-shadow: none;
+}
+.dark .sre-markdown .x-markdown table:not(pre) th,
+.dark .sre-markdown .x-markdown table:not(pre) td {
+  border-color: rgb(55 65 81);
+}
+.dark .sre-markdown .x-markdown table:not(pre) th {
+  background: rgb(30 41 59);
+  color: rgb(226 232 240);
+}
+.dark .sre-markdown .x-markdown table:not(pre) tbody tr:nth-child(even) {
+  background: rgb(15 23 42 / 0.5);
+}
+.dark .sre-markdown .x-markdown table:not(pre) tbody tr:hover {
+  background: rgb(30 58 138 / 0.35);
+}
+
 .sre-markdown .x-markdown a {
   color: rgb(59 130 246);
 }

@@ -2,7 +2,14 @@ import {
   queryAgentSessionsLogsRaw,
   queryAgentSessionsRawWithLogTokens,
 } from "../backend/agentSessionsQuery.mjs";
-import { handleSreAgentMiddleware, handleSreAgentActionMiddleware, handleListAgentsMiddleware, isOpenClawAgentsListPath } from "../backend/sre-agent/sre-agent-handler.mjs";
+import {
+  handleSreAgentMiddleware,
+  handleSreAgentActionMiddleware,
+  handleListAgentsMiddleware,
+  isOpenClawAgentsListPath,
+  handleOpenClawSessionsMiddleware,
+  isOpenClawSessionsPath,
+} from "../backend/sre-agent/sre-agent-handler.mjs";
 import { queryAuditDashboardMetrics } from "../backend/security-audit/audit-dashboard-query.mjs";
 import { queryCostOverviewSnapshot } from "../backend/cost-analysis/cost-overview-query.mjs";
 import {
@@ -60,6 +67,7 @@ function requestPathname(raw) {
  * - GET /api/session-cost-detail?startDay=&endDay=
  * - GET /api/session-cost-options?startDay=&endDay=
  * - GET /api/openclaw/agents | GET /api/sre-agent/agents — OpenClaw Agent 列表（JSON）
+ * - GET /api/openclaw/sessions | GET /api/openclaw/sessions/:key — OpenClaw 会话列表/详情（代理）
  * - GET /api/digital-employees/overview?days=
  * - GET /api/digital-employees/profile?agentName=&days=&sessionKey=
  */
@@ -80,6 +88,14 @@ export function agentSessionsDevApi() {
           void handleListAgentsMiddleware(req, res).catch((e) => {
             if (!res.headersSent && !res.writableEnded) {
               sendJson(res, 500, { agents: [], error: String(e?.message || e) });
+            }
+          });
+          return;
+        }
+        if (isOpenClawSessionsPath(path) && req.method === "GET") {
+          void handleOpenClawSessionsMiddleware(req, res).catch((e) => {
+            if (!res.headersSent && !res.writableEnded) {
+              sendJson(res, 500, { error: String(e?.message || e) });
             }
           });
           return;

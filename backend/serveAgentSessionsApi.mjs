@@ -15,7 +15,13 @@
  */
 import "./env-bootstrap.mjs";
 import http from "node:http";
-import { handleSreAgent, handleListAgents, isOpenClawAgentsListPath } from "./sre-agent/sre-agent-handler.mjs";
+import {
+  handleSreAgent,
+  handleListAgents,
+  isOpenClawAgentsListPath,
+  handleOpenClawSessions,
+  isOpenClawSessionsPath,
+} from "./sre-agent/sre-agent-handler.mjs";
 import {
   queryAgentSessionsLogsRaw,
   queryAgentSessionsRawWithLogTokens,
@@ -70,6 +76,10 @@ const server = http.createServer(async (req, res) => {
   // OpenClaw Agent 列表（GET），须剥离 ?query，避免误匹配下方 /api/sre-agent
   if (isOpenClawAgentsListPath(path) && req.method === "GET") {
     return handleListAgents(req, res);
+  }
+
+  if (isOpenClawSessionsPath(path) && req.method === "GET") {
+    return handleOpenClawSessions(req, res);
   }
 
   // SRE Agent SSE endpoint (POST only)
@@ -475,19 +485,13 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-<<<<<<< .mine
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/monitor-dashboard`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/monitor-session`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/digital-employees/overview`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/digital-employees/profile?agentName=`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/otel-overview`);
-=======
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/openclaw/agents`);
-
-
-
-
->>>>>>> .theirs
+  console.log(`[agent-sessions] http://127.0.0.1:${port}/api/openclaw/sessions`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/cost-overview`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/agent-cost-list?startDay=&endDay=`);
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/llm-cost-detail?startDay=&endDay=`);

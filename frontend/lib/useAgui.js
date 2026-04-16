@@ -261,6 +261,27 @@ export default function useAgui(agent) {
     msgBufRef.current = {};
   }, []);
 
+  /** 从历史会话载入消息（不触发 Agent 运行） */
+  const hydrateMessages = useCallback((list) => {
+    subRef.current?.unsubscribe();
+    msgBufRef.current = {};
+    setToolCalls({});
+    setSteps([]);
+    setAgentState({});
+    setWorkspacePanels([]);
+    setConfirm(null);
+    setError(null);
+    setStatus("idle");
+    setMessages(
+      (list || []).map((m) => ({
+        id: m.id ?? uid("hist"),
+        role: m.role === "user" || m.role === "assistant" ? m.role : "user",
+        content: String(m.content ?? ""),
+        streaming: false,
+      })),
+    );
+  }, []);
+
   return {
     messages,
     toolCalls,
@@ -274,5 +295,6 @@ export default function useAgui(agent) {
     respondConfirm,
     cancel,
     reset,
+    hydrateMessages,
   };
 }

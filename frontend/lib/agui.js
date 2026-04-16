@@ -41,6 +41,12 @@ export const EventType = {
 let _idCounter = 0;
 export const uid = (prefix = "id") => `${prefix}_${Date.now()}_${++_idCounter}`;
 
+let _opsRobotThreadSeq = 0;
+/** 新建 SRE 会话：应用内临时 threadId（`opsRobot_thread_${ts}_…`），供 /api/sre-agent 与 Gateway 映射 */
+export function newOpsRobotThreadId() {
+  return `opsRobot_thread_${Date.now()}_${++_opsRobotThreadSeq}`;
+}
+
 // ─── AG-UI HTTP Client (SSE transport) ───────────────────────────
 export class HttpAgent {
   constructor({ url, agentId, threadId }) {

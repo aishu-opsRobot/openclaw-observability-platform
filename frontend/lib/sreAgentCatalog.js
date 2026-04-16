@@ -1,7 +1,7 @@
 /**
  * SRE Agent 可选 Agent 列表（对话目标 OpenClaw agent_id）。
  *
- * 优先从后端 GET /api/openclaw/agents（与 /api/sre-agent/agents 等价）拉取 OpenClaw 已注册 Agent；
+ * 优先从后端 GET /api/openclaw/agents（与 /api/sre/agents 等价）拉取 OpenClaw 已注册 Agent；
  * 若接口不可用，回退到 VITE_SRE_AGENT_CATALOG 环境变量（离线 fallback）。
  */
 
@@ -29,7 +29,7 @@ function parseCatalog() {
       /* fall through */
     }
   }
-  return [{ id: "sre-agent", label: "内置 SRE Agent", description: "平台默认（与后端 OPENCLAW_AGENT_ID 可一致）" }];
+  return [{ id: "sre", label: "内置 SRE Agent", description: "平台默认（与后端 OPENCLAW_AGENT_ID 可一致）" }];
 }
 
 export const STATIC_FALLBACK_CATALOG = parseCatalog();
@@ -42,12 +42,20 @@ export const STATIC_FALLBACK_CATALOG = parseCatalog();
  * @returns {Promise<{ agents: Array<{id:string, label:string, status?:string, description?:string}>, fromRemote: boolean }>}
  */
 export async function fetchAgentCatalog() {
+  const url = "/api/openclaw/agents";
   try {
-    const resp = await fetch("/api/openclaw/agents", {
+    const resp = await fetch(url, {
       signal: AbortSignal.timeout(6_000),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const json = await resp.json();
+    const text = await resp.text().catch(() => "");
+    const t = text.trim();
+    if (t.startsWith("<") || /^<!doctype/i.test(t)) {
+      throw new Error(
+        "「/api/openclaw/agents」返回了 HTML 而非 JSON（多为 Nginx 未把 /api 转到后端、或 SPA 吞了路由）。请确认生产环境 location /api/ 代理到带 OpenClaw 代理的 Node 服务。",
+      );
+    }
+    const json = JSON.parse(t || "{}");
     const list = Array.isArray(json.agents) ? json.agents : [];
     if (list.length > 0) {
       return { agents: list, fromRemote: true };
@@ -74,7 +82,7 @@ export function readStoredAgentId(catalog) {
   } catch {
     /* noop */
   }
-  return list[0]?.id ?? "sre-agent";
+  return list[0]?.id ?? "sre";
 }
 
 export function writeStoredAgentId(id) {

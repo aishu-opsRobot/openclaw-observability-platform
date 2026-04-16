@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import XMarkdown from "@ant-design/x-markdown";
-import { MockAgent, HttpAgent, uid } from "../lib/agui.js";
+import { MockAgent, HttpAgent, newOpsRobotThreadId, uid } from "../lib/agui.js";
 import { matchScenario } from "../lib/agui-mock-scenarios.js";
 import useAgui from "../lib/useAgui.js";
 import { dispatchUserAction } from "../lib/a2ui.js";
 import { fetchAgentCatalog, STATIC_FALLBACK_CATALOG, readStoredAgentId, writeStoredAgentId } from "../lib/sreAgentCatalog.js";
+import {
+  extractSessionsArray,
+  fetchOpenClawSessionDetail,
+  fetchOpenClawSessionList,
+  groupSessionsByAgent,
+  messagesFromOpenClawSessionDetail,
+  pickSessionKey,
+  sessionListPrimaryLabel,
+  sessionListRowStableKey,
+} from "../lib/sreOpenclawSessions.js";
 import WorkspaceRenderer from "../components/agui/WorkspaceRenderer.jsx";
 
 const USE_MOCK = import.meta.env.VITE_SRE_AGENT_MOCK === "true"
@@ -18,6 +28,26 @@ const SKILLS = [
 ];
 
 const REFRESH_INTERVAL = 60_000;
+
+/** 会话页（聊天 + 工作区）左侧宽度，可拖拽调整并写入 localStorage */
+const CHAT_SPLIT_STORAGE_KEY = "sre-agent-chat-left-px";
+const CHAT_SPLIT_DEFAULT = 380;
+const CHAT_SPLIT_MIN = 280;
+const CHAT_SPLIT_HARD_MAX = 920;
+const WORKSPACE_MIN_WIDTH = 280;
+
+function readStoredChatSplitPx() {
+  if (typeof localStorage === "undefined") return CHAT_SPLIT_DEFAULT;
+  try {
+    const n = Number(localStorage.getItem(CHAT_SPLIT_STORAGE_KEY));
+    if (Number.isFinite(n)) {
+      return Math.min(CHAT_SPLIT_HARD_MAX, Math.max(CHAT_SPLIT_MIN, Math.round(n)));
+    }
+  } catch {
+    /* ignore */
+  }
+  return CHAT_SPLIT_DEFAULT;
+}
 
 function useAgentCatalog() {
   const [catalog, setCatalog] = useState(STATIC_FALLBACK_CATALOG);
@@ -47,6 +77,54 @@ function useAgentCatalog() {
   return { catalog, loading, error, fromRemote };
 }
 
+function useOpenClawSessionsList() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async (silent = false) => {
+    if (USE_MOCK) {
+      setRows([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    try {
+      if (!silent) setLoading(true);
+      const data = await fetchOpenClawSessionList({ limit: 100 });
+      setRows(extractSessionsArray(data));
+      setError(null);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load(false);
+    const timer = setInterval(() => void load(true), REFRESH_INTERVAL);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  return { rows, loading, error, reload: load };
+}
+
+function sessionTimeLabel(row) {
+  const raw =
+    row?.updatedAt ??
+    row?.updated_at ??
+    row?.createdAt ??
+    row?.created_at ??
+    "";
+  if (!raw) return "";
+  try {
+    return new Date(raw).toLocaleString();
+  } catch {
+    return String(raw);
+  }
+}
+
 /**
  * SRE Agent — 左侧聊天框(意图层) + 右侧工作区(执行层)
  *
@@ -57,12 +135,81 @@ function useAgentCatalog() {
 export default function SreAgent() {
   const [input, setInput] = useState("");
   const { catalog, loading: catalogLoading, error: catalogError, fromRemote } = useAgentCatalog();
+  const { rows: sessionRows, loading: sessionsLoading, error: sessionsError, reload: reloadSessions } = useOpenClawSessionsList();
+  const sessionGroups = useMemo(() => groupSessionsByAgent(sessionRows), [sessionRows]);
+  /** 侧栏按 agent 分组：折叠中的 groupId */
+  const [collapsedSessionGroups, setCollapsedSessionGroups] = useState(() => new Set());
+  const toggleSessionGroupCollapse = useCallback((groupId) => {
+    setCollapsedSessionGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }, []);
   const [selectedAgentId, setSelectedAgentId] = useState(() => readStoredAgentId(STATIC_FALLBACK_CATALOG));
+  const [sessionThreadId, setSessionThreadId] = useState(() => newOpsRobotThreadId());
+  /** 非空表示已从 OpenClaw 打开某会话（即使暂无历史消息也保持聊天布局） */
+  const [activeOpenClawSessionKey, setActiveOpenClawSessionKey] = useState(null);
+  const [openingSessionKey, setOpeningSessionKey] = useState(null);
+  const [sessionOpenError, setSessionOpenError] = useState(null);
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
   const prevAgentIdRef = useRef(null);
+  const chatSplitContainerRef = useRef(null);
+  const splitLeftPxRef = useRef(readStoredChatSplitPx());
+  const [splitLeftPx, setSplitLeftPx] = useState(() => splitLeftPxRef.current);
+  const [splitDragging, setSplitDragging] = useState(false);
+  const splitDragStartRef = useRef(null);
 
-  const threadId = useMemo(() => uid("thread"), [selectedAgentId]);
+  useEffect(() => {
+    splitLeftPxRef.current = splitLeftPx;
+  }, [splitLeftPx]);
+
+  const clampChatSplitPx = useCallback((raw) => {
+    const el = chatSplitContainerRef.current;
+    const maxFromContainer = el
+      ? el.getBoundingClientRect().width - WORKSPACE_MIN_WIDTH
+      : CHAT_SPLIT_HARD_MAX;
+    const cap = Math.min(CHAT_SPLIT_HARD_MAX, Math.max(CHAT_SPLIT_MIN, maxFromContainer));
+    return Math.min(cap, Math.max(CHAT_SPLIT_MIN, Math.round(raw)));
+  }, []);
+
+  const handleChatSplitMouseDown = useCallback((e) => {
+    e.preventDefault();
+    splitDragStartRef.current = { startX: e.clientX, startW: splitLeftPxRef.current };
+    setSplitDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!splitDragging) return;
+    const onMove = (e) => {
+      const d = splitDragStartRef.current;
+      if (!d) return;
+      const next = clampChatSplitPx(d.startW + e.clientX - d.startX);
+      splitLeftPxRef.current = next;
+      setSplitLeftPx(next);
+    };
+    const onUp = () => {
+      splitDragStartRef.current = null;
+      setSplitDragging(false);
+      try {
+        localStorage.setItem(CHAT_SPLIT_STORAGE_KEY, String(splitLeftPxRef.current));
+      } catch {
+        /* ignore */
+      }
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [splitDragging, clampChatSplitPx]);
 
   const agent = useMemo(() => {
     if (USE_MOCK) {
@@ -76,14 +223,22 @@ export default function SreAgent() {
     return new HttpAgent({
       url: "/api/sre-agent",
       agentId: selectedAgentId,
-      threadId,
+      threadId: sessionThreadId,
     });
-  }, [selectedAgentId, threadId]);
+  }, [selectedAgentId, sessionThreadId]);
 
   const {
     messages, toolCalls, steps, workspacePanels, confirm,
-    status, error, sendMessage, respondConfirm, cancel, reset,
+    status, error, sendMessage, respondConfirm, cancel, reset: resetAgui, hydrateMessages,
   } = useAgui(agent);
+
+  const resetConversation = useCallback(() => {
+    setActiveOpenClawSessionKey(null);
+    setSessionOpenError(null);
+    setOpeningSessionKey(null);
+    setSessionThreadId(newOpsRobotThreadId());
+    resetAgui();
+  }, [resetAgui]);
 
   useEffect(() => {
     if (catalog.length > 0 && !catalog.some((a) => a.id === selectedAgentId)) {
@@ -100,8 +255,10 @@ export default function SreAgent() {
     }
     if (prevAgentIdRef.current === selectedAgentId) return;
     prevAgentIdRef.current = selectedAgentId;
-    reset();
-  }, [selectedAgentId, reset]);
+    setActiveOpenClawSessionKey(null);
+    setSessionThreadId(newOpsRobotThreadId());
+    resetAgui();
+  }, [selectedAgentId, resetAgui]);
 
   const handleAgentChange = useCallback((id) => {
     setSelectedAgentId(id);
@@ -109,8 +266,48 @@ export default function SreAgent() {
   }, []);
 
   const isRunning = status === "running";
-  const hasConversation = messages.length > 0;
+  const showChatWorkspace = messages.length > 0 || activeOpenClawSessionKey != null;
   const toolCallList = Object.values(toolCalls);
+
+  useEffect(() => {
+    if (!showChatWorkspace) return;
+    const id = requestAnimationFrame(() => {
+      setSplitLeftPx((w) => clampChatSplitPx(w));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showChatWorkspace, clampChatSplitPx]);
+
+  useEffect(() => {
+    if (!showChatWorkspace) return;
+    const onResize = () => {
+      setSplitLeftPx((w) => clampChatSplitPx(w));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [showChatWorkspace, clampChatSplitPx]);
+
+  const openHistorySession = useCallback(
+    async (row) => {
+      const key = pickSessionKey(row);
+      if (!key || isRunning) return;
+      const rowBusy = sessionListRowStableKey(row) || key;
+      setSessionOpenError(null);
+      setOpeningSessionKey(rowBusy);
+      try {
+        const detail = await fetchOpenClawSessionDetail(key);
+        const msgs = messagesFromOpenClawSessionDetail(detail);
+        setSessionThreadId(key);
+        hydrateMessages(msgs);
+        setActiveOpenClawSessionKey(key);
+        void reloadSessions();
+      } catch (err) {
+        setSessionOpenError(err.message || String(err));
+      } finally {
+        setOpeningSessionKey(null);
+      }
+    },
+    [hydrateMessages, isRunning, reloadSessions],
+  );
 
   const handleAction = useCallback((action) => {
     dispatchUserAction(action);
@@ -135,64 +332,172 @@ export default function SreAgent() {
     }
   };
 
-  // ─── Empty state (no conversation yet) ───────────────────────
-  if (!hasConversation) {
+  // ─── 默认：左侧 OpenClaw 历史会话，右侧新建会话 ─────────────────
+  if (!showChatWorkspace) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-8 px-6">
-        <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 dark:bg-primary/20">
-            <RobotIcon className="h-8 w-8 text-primary" />
+      <div className="flex gap-0 -m-6" style={{ height: "calc(100% + 48px)" }}>
+        <aside className="flex w-[280px] shrink-0 flex-col border-r border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-950/40">
+          <div className="border-b border-gray-200 px-3 py-2.5 dark:border-gray-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">OpenClaw 会话</p>
+            <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">来自 Gateway 接口</p>
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">SRE Agent</h2>
-          <p className="mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
-            智能运维助手 — 左侧下达指令，右侧实时展示执行结果。
-            基于 <span className="font-medium text-primary">OpenClaw</span> +
-            <span className="font-medium text-primary"> AG-UI 协议</span>驱动。
-          </p>
-          {USE_MOCK && (
-            <span className="mt-1 inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-              Demo 模式
-            </span>
-          )}
-        </div>
-
-        <div className="grid w-full max-w-lg grid-cols-2 gap-3">
-          {SKILLS.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => handleSend(s.prompt)}
-              className="group flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-primary/40 hover:shadow-lg dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary/40"
-            >
-              <SkillIcon name={s.icon} />
-              <div>
-                <p className="text-sm font-semibold text-gray-800 group-hover:text-primary dark:text-gray-100">{s.label}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{s.prompt.slice(0, 24)}…</p>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="w-full max-w-lg">
-          <div className="flex items-end gap-2">
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-2 py-2">
+              {USE_MOCK && (
+                <p className="px-2 py-3 text-xs text-gray-500 dark:text-gray-400">Demo 模式不拉取远端会话。</p>
+              )}
+              {!USE_MOCK && sessionsLoading && sessionRows.length === 0 && (
+                <p className="px-2 py-3 text-xs text-gray-500">加载中…</p>
+              )}
+              {!USE_MOCK && sessionsError && (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-2 text-[11px] text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+                  {sessionsError}
+                </p>
+              )}
+              {!USE_MOCK &&
+                sessionGroups.map((group) => {
+                  const collapsed = collapsedSessionGroups.has(group.groupId);
+                  return (
+                  <div key={group.groupId} className="mb-2 last:mb-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleSessionGroupCollapse(group.groupId)}
+                      aria-expanded={!collapsed}
+                      className="mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left transition hover:bg-gray-200/80 dark:hover:bg-gray-800/60"
+                    >
+                      <svg
+                        className={`h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform dark:text-gray-400 ${collapsed ? "-rotate-90" : ""}`}
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden
+                      >
+                        <path d="M5.5 7.5 10 12l4.5-4.5H5.5Z" />
+                      </svg>
+                      <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                        {group.label}
+                        <span className="ml-1 font-normal normal-case text-gray-400 dark:text-gray-500">({group.rows.length})</span>
+                      </span>
+                    </button>
+                    {!collapsed && (
+                    <div className="space-y-0 pl-0.5">
+                      {group.rows.map((row, idx) => {
+                        const sessionKeyForApi = pickSessionKey(row);
+                        if (!sessionKeyForApi) return null;
+                        const stableKey = sessionListRowStableKey(row) || `${group.groupId}_${idx}`;
+                        const busy = openingSessionKey === stableKey;
+                        const title = sessionListPrimaryLabel(row);
+                        return (
+                          <button
+                            key={stableKey}
+                            type="button"
+                            disabled={busy || isRunning}
+                            onClick={() => void openHistorySession(row)}
+                            className="mb-1.5 w-full rounded-lg border border-transparent px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-white hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-gray-900/80"
+                          >
+                            <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-100" title={title}>
+                              {title}
+                            </p>
+                            {sessionTimeLabel(row) && (
+                              <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-500">{sessionTimeLabel(row)}</p>
+                            )}
+                            <p
+                              className="mt-0.5 truncate font-mono text-[10px] text-gray-500 dark:text-gray-400"
+                              title={sessionKeyForApi}
+                            >
+                              {sessionKeyForApi.length > 42
+                                ? `${sessionKeyForApi.slice(0, 20)}…${sessionKeyForApi.slice(-16)}`
+                                : sessionKeyForApi}
+                            </p>
+                            {busy && <p className="mt-1 text-[10px] text-primary">打开中…</p>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    )}
+                  </div>
+                  );
+                })}
+              {!USE_MOCK && !sessionsLoading && !sessionsError && sessionRows.length === 0 && (
+                <p className="px-2 py-3 text-xs text-gray-500 dark:text-gray-400">暂无会话记录</p>
+              )}
+            </div>
             {!USE_MOCK && (
-              <AgentPicker
-                value={selectedAgentId}
-                onChange={handleAgentChange}
-                catalog={catalog}
-                loading={catalogLoading}
-                error={catalogError}
-                compact
-              />
+              <div className="border-t border-gray-200 p-2 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => void reloadSessions()}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-600 transition hover:border-primary/40 hover:text-primary dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-primary/40"
+                >
+                  刷新列表
+                </button>
+              </div>
             )}
-            <div className="flex-1">
-              <InputBar
-                input={input}
-                setInput={setInput}
-                onSend={() => handleSend()}
-                onKeyDown={handleKeyDown}
-                isRunning={false}
-                inputRef={inputRef}
-              />
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-8 overflow-y-auto px-6 py-8">
+          <div className="text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 dark:bg-primary/20">
+              <RobotIcon className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">SRE Agent</h2>
+            <p className="mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
+              智能运维助手 — 左侧下达指令，右侧实时展示执行结果。
+              基于 <span className="font-medium text-primary">OpenClaw</span> +
+              <span className="font-medium text-primary"> AG-UI 协议</span>驱动。
+            </p>
+            {USE_MOCK && (
+              <span className="mt-1 inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                Demo 模式
+              </span>
+            )}
+          </div>
+
+          {sessionOpenError && (
+            <div className="w-full max-w-lg rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+              {sessionOpenError}
+            </div>
+          )}
+
+          <div className="grid w-full max-w-lg grid-cols-2 gap-3">
+            {SKILLS.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => handleSend(s.prompt)}
+                className="group flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-primary/40 hover:shadow-lg dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary/40"
+              >
+                <SkillIcon name={s.icon} />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800 group-hover:text-primary dark:text-gray-100">{s.label}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">{s.prompt.slice(0, 24)}…</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="w-full max-w-lg">
+            <div className="flex items-end gap-2">
+              {!USE_MOCK && (
+                <AgentPicker
+                  value={selectedAgentId}
+                  onChange={handleAgentChange}
+                  catalog={catalog}
+                  loading={catalogLoading}
+                  error={catalogError}
+                  compact
+                />
+              )}
+              <div className="flex-1">
+                <InputBar
+                  input={input}
+                  setInput={setInput}
+                  onSend={() => handleSend()}
+                  onKeyDown={handleKeyDown}
+                  isRunning={isRunning}
+                  onCancel={cancel}
+                  inputRef={inputRef}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -202,13 +507,30 @@ export default function SreAgent() {
 
   // ─── Main: split layout ──────────────────────────────────────
   return (
-    <div className="flex gap-0 -m-6" style={{ height: "calc(100% + 48px)" }}>
+    <div
+      ref={chatSplitContainerRef}
+      className="flex min-w-0 gap-0 -m-6"
+      style={{ height: "calc(100% + 48px)" }}
+    >
       {/* ── 左侧：聊天框 (意图层) ── */}
-      <div className="flex w-[380px] shrink-0 flex-col border-r border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-950/30">
+      <div
+        className="flex shrink-0 flex-col border-r border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-950/30"
+        style={{ width: splitLeftPx, minWidth: CHAT_SPLIT_MIN }}
+      >
         {/* Chat header */}
         <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-2.5 dark:border-gray-700">
           <div className="min-w-0 flex flex-1 flex-col gap-1.5">
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={resetConversation}
+                className="shrink-0 rounded-md p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                title="返回会话列表"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+              </button>
               <RobotIcon className="h-5 w-5 shrink-0 text-primary" />
               <span className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">SRE Agent</span>
               {isRunning && (
@@ -221,10 +543,16 @@ export default function SreAgent() {
             {!USE_MOCK && (
               <p className="truncate text-[10px] text-gray-400 dark:text-gray-500" title={selectedAgentId}>
                 Agent: <span className="font-mono">{catalog.find((a) => a.id === selectedAgentId)?.label || selectedAgentId}</span>
+                {activeOpenClawSessionKey && (
+                  <>
+                    {" · "}
+                    <span className="font-mono" title={activeOpenClawSessionKey}>会话 {activeOpenClawSessionKey.length > 20 ? `${activeOpenClawSessionKey.slice(0, 10)}…` : activeOpenClawSessionKey}</span>
+                  </>
+                )}
               </p>
             )}
           </div>
-          <button onClick={reset} className="shrink-0 rounded-md p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300" title="新对话">
+          <button onClick={resetConversation} className="shrink-0 rounded-md p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300" title="新对话">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
@@ -334,8 +662,17 @@ export default function SreAgent() {
         </div>
       </div>
 
+      {/* 可拖拽调整左右栏宽度 */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整左右分栏宽度"
+        onMouseDown={handleChatSplitMouseDown}
+        className={`group relative z-10 w-2 shrink-0 cursor-col-resize select-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-gray-200 after:transition-colors dark:after:bg-gray-600 ${splitDragging ? "after:bg-primary" : "hover:after:bg-primary/60"}`}
+      />
+
       {/* ── 右侧：工作区 (执行层) ── */}
-      <div className="flex-1 overflow-y-auto bg-gray-100/50 p-5 dark:bg-gray-950/50">
+      <div className="min-w-0 flex-1 overflow-y-auto bg-gray-100/50 p-5 dark:bg-gray-950/50">
         <WorkspaceRenderer panels={workspacePanels} onAction={handleAction} />
       </div>
     </div>
