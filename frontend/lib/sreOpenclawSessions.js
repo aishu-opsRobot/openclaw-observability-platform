@@ -69,6 +69,26 @@ export function extractSessionsArray(json) {
   return [];
 }
 
+/**
+ * 与后端 `openclaw-client.mjs` 中 `isEphemeralAppThreadId` 对齐：
+ * 应用内临时 threadId（新建对话）在发往 Gateway 时会映射为 `agent:<id>:<thread>`。
+ */
+export function isEphemeralAppThreadId(threadId) {
+  const s = String(threadId ?? "").trim();
+  return /^thread_\d+_/i.test(s) || /^opsRobot_thread_\d+_/i.test(s);
+}
+
+/**
+ * 计算拉取 OpenClaw 会话历史用的 session key（与 Chat 请求头 `X-OpenClaw-Session-Key` 规则一致）。
+ */
+export function computeGatewaySessionKeyForChat(threadId, agentId) {
+  const sk = String(threadId ?? "").trim();
+  const aid = String(agentId ?? "").trim();
+  if (!sk) return "";
+  if (!aid || !isEphemeralAppThreadId(sk)) return sk;
+  return `agent:${aid}:${sk}`;
+}
+
 export function pickSessionKey(row) {
   if (!row || typeof row !== "object") return "";
   return (

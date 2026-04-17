@@ -128,6 +128,7 @@ export default function SreAgent() {
   const {
     messages, toolCalls, steps, workspacePanels, confirm,
     status, error, sendMessage, respondConfirm, cancel, reset: resetAgui, hydrateMessages,
+    abortSessionFollowUp,
   } = useAgui(agent);
 
   const resetConversation = useCallback(() => {
@@ -165,6 +166,13 @@ export default function SreAgent() {
 
   const isRunning = status === "running";
   const showChatWorkspace = messages.length > 0 || activeOpenClawSessionKey != null;
+
+  /** 关闭会话窗口（返回落地页 / 无聊天区）时中止 OpenClaw 会话历史轮询 */
+  useEffect(() => {
+    if (!showChatWorkspace) {
+      abortSessionFollowUp();
+    }
+  }, [showChatWorkspace, abortSessionFollowUp]);
   const toolCallList = useMemo(() => Object.values(toolCalls), [toolCalls]);
   const selectedAgentMeta = useMemo(
     () => catalog.find((a) => a.id === selectedAgentId),

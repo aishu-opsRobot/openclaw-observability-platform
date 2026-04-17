@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
-import { EventType, uid } from "./agui.js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { EventType, HttpAgent, uid } from "./agui.js";
+import { runOpenClawSessionFollowUpPoll } from "./sreAgentSessionFollowUp.js";
 import { normalizeConfirmPayload, parseAssistantConfirmSources } from "./aguiConfirmBlock.js";
 
 /**
@@ -52,6 +53,14 @@ export default function useAgui(agent) {
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const confirmResolveRef = useRef(null);
+  const sessionFollowUpAbortRef = useRef(null);
+
+  const abortSessionFollowUp = useCallback(() => {
+    sessionFollowUpAbortRef.current?.abort();
+    sessionFollowUpAbortRef.current = null;
+  }, []);
+
+  useEffect(() => () => abortSessionFollowUp(), [abortSessionFollowUp]);
 
   const processEvent = useCallback((event) => {
     switch (event.type) {
@@ -242,6 +251,8 @@ export default function useAgui(agent) {
         content: m.content,
       }));
 
+      abortSessionFollowUp();
+
       subRef.current?.unsubscribe();
       subRef.current = agent.runAgent({ messages: allMessages }).subscribe({
         next: processEvent,
@@ -251,18 +262,31 @@ export default function useAgui(agent) {
         },
         complete: () => {
           setStatus((prev) => (prev === "error" ? "error" : "idle"));
+          if (agent instanceof HttpAgent) {
+            const ac = new AbortController();
+            sessionFollowUpAbortRef.current = ac;
+            void runOpenClawSessionFollowUpPoll({
+              threadId: agent.threadId,
+              agentId: agent.agentId,
+              getMessages: () => messagesRef.current,
+              setMessages,
+              signal: ac.signal,
+            });
+          }
         },
       });
     },
-    [agent, processEvent],
+    [agent, processEvent, abortSessionFollowUp],
   );
 
   const cancel = useCallback(() => {
+    abortSessionFollowUp();
     subRef.current?.unsubscribe();
     setStatus("idle");
-  }, []);
+  }, [abortSessionFollowUp]);
 
   const reset = useCallback(() => {
+    abortSessionFollowUp();
     subRef.current?.unsubscribe();
     setMessages([]);
     setToolCalls({});
@@ -273,10 +297,11 @@ export default function useAgui(agent) {
     setStatus("idle");
     setError(null);
     msgBufRef.current = {};
-  }, []);
+  }, [abortSessionFollowUp]);
 
   /** 从历史会话载入消息（不触发 Agent 运行） */
   const hydrateMessages = useCallback((list) => {
+    abortSessionFollowUp();
     subRef.current?.unsubscribe();
     msgBufRef.current = {};
     setToolCalls({});
@@ -301,7 +326,7 @@ export default function useAgui(agent) {
         };
       }),
     );
-  }, []);
+  }, [abortSessionFollowUp]);
 
   return {
     messages,
@@ -317,5 +342,6 @@ export default function useAgui(agent) {
     cancel,
     reset,
     hydrateMessages,
+    abortSessionFollowUp,
   };
 }
