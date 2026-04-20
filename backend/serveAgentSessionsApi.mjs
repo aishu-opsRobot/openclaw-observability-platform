@@ -23,6 +23,7 @@ import {
   isOpenClawSessionsPath,
 } from "./sre-agent/sre-agent-handler.mjs";
 import { handleSreVizFileRead, isSreVizJsonPath } from "./sre-agent/sre-viz-file-handler.mjs";
+import { attachSreAgentWebSocket } from "./sre-agent/sre-agent-ws.mjs";
 import {
   queryAgentSessionsLogsRaw,
   queryAgentSessionsRawWithLogTokens,
@@ -85,6 +86,13 @@ const server = http.createServer(async (req, res) => {
 
   if (isSreVizJsonPath(path) && req.method === "GET") {
     return handleSreVizFileRead(req, res, url);
+  }
+
+  // WebSocket 仅 upgrade，不走 HTTP POST
+  if (path === "/api/sre-agent/ws") {
+    res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: "WebSocket only — use ws:// on this path" }));
+    return;
   }
 
   // SRE Agent SSE endpoint (POST only)
@@ -488,6 +496,8 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404);
   res.end();
 });
+
+attachSreAgentWebSocket(server);
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`[agent-sessions] http://127.0.0.1:${port}/api/monitor-dashboard`);

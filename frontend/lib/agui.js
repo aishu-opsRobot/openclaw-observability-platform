@@ -139,6 +139,227 @@ export class HttpAgent {
   }
 }
 
+const DEFAULT_SRE_WS_PATH = "/api/sre-agent/ws";
+
+function buildSreAgentWebSocketUrl(path) {
+  if (typeof window === "undefined") {
+    return `ws://127.0.0.1${path}`;
+  }
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}${path}`;
+}
+
+/**
+ * SRE Agent：WebSocket 传输，AG-UI 事件为 JSON 文本帧。
+ * 长连接：先 `connect()`，同一会话内多次 `runAgent` 复用同一 socket；`RUN_FINISHED` 不关闭连接。
+ * 会话增量：`startSessionPoll` 每约 3s 发送 `op: "poll_session"`，服务端经 WS 推送 `CUSTOM openclaw_session_detail`。
+ */
+export class WsAgent {
+  constructor({ wsPath = DEFAULT_SRE_WS_PATH, agentId, threadId }) {
+    this.wsPath = wsPath;
+    this.agentId = agentId;
+    this.threadId = threadId;
+    this._abortCtrl = null;
+    /** @type {WebSocket | null} */
+    this._ws = null;
+    /** @type {Promise<void> | null} */
+    this._connectPromise = null;
+    /** @type {{ next: Function, complete?: Function, error?: Function } | null} */
+    this._runSubscriber = null;
+    /** @type {ReturnType<typeof setInterval> | null} */
+    this._pollTimer = null;
+    /** @type {((event: object) => void) | null} */
+    this._sessionPushHandler = null;
+  }
+
+  /**
+   * 建立长连接（进入会话后调用；未连接时 `runAgent` 也会自动 connect）。
+   * @returns {Promise<void>}
+   */
+  connect() {
+    if (typeof WebSocket === "undefined") {
+      return Promise.reject(new Error("WebSocket 不可用"));
+    }
+    if (this._ws?.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+    if (this._connectPromise) {
+      return this._connectPromise;
+    }
+
+    const wsUrl = buildSreAgentWebSocketUrl(this.wsPath);
+    const ws = new WebSocket(wsUrl);
+    this._ws = ws;
+
+    this._connectPromise = new Promise((resolve, reject) => {
+      const fail = () => {
+        this._connectPromise = null;
+        this._ws = null;
+        reject(new Error("WebSocket 连接失败"));
+      };
+
+      ws.addEventListener(
+        "open",
+        () => {
+          this._connectPromise = null;
+          resolve();
+        },
+        { once: true },
+      );
+      ws.addEventListener("error", fail, { once: true });
+
+      ws.onmessage = (ev) => this._onMessage(ev);
+      ws.onclose = (ev) => {
+        this._connectPromise = null;
+        const wasOpen = this._ws === ws;
+        this._ws = null;
+        if (!wasOpen) return;
+        if (this._runSubscriber) {
+          const sub = this._runSubscriber;
+          this._runSubscriber = null;
+          sub.error?.(
+            new Error(
+              ev.reason ? String(ev.reason) : `WebSocket 已断开（code ${ev.code}）`,
+            ),
+          );
+        }
+      };
+    });
+
+    return this._connectPromise;
+  }
+
+  _onMessage(ev) {
+    let event;
+    try {
+      event = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (this._runSubscriber) {
+      const { next, complete } = this._runSubscriber;
+      next(event);
+      if (event.type === EventType.RUN_FINISHED || event.type === EventType.RUN_ERROR) {
+        this._runSubscriber = null;
+        complete?.();
+      }
+    } else if (this._sessionPushHandler) {
+      this._sessionPushHandler(event);
+    }
+  }
+
+  /**
+   * 启动会话轮询（经 WS `poll_session`）；运行中 `runAgent` 占用时不发送 poll。
+   * @param {{ intervalMs?: number, onEvent: (event: object) => void }} opts
+   */
+  startSessionPoll({ intervalMs = 3000, onEvent }) {
+    this.stopSessionPoll();
+    this._sessionPushHandler = onEvent ?? null;
+    const tick = () => {
+      if (this._ws?.readyState !== WebSocket.OPEN) return;
+      if (this._runSubscriber) return;
+      try {
+        this._ws.send(
+          JSON.stringify({
+            op: "poll_session",
+            threadId: this.threadId,
+            agentId: this.agentId,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+    tick();
+    this._pollTimer = setInterval(tick, intervalMs);
+  }
+
+  /** 停止会话轮询定时器（不断开 WebSocket） */
+  stopSessionPoll() {
+    if (this._pollTimer != null) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    }
+  }
+
+  /** 离开会话时关闭连接 */
+  disconnect() {
+    this.stopSessionPoll();
+    this._sessionPushHandler = null;
+    this._runSubscriber = null;
+    this._connectPromise = null;
+    try {
+      this._ws?.close();
+    } catch {
+      /* ignore */
+    }
+    this._ws = null;
+  }
+
+  runAgent({ messages = [], tools = [], context = [], state = {} } = {}) {
+    const self = this;
+    return {
+      subscribe({ next, error, complete }) {
+        self._abortCtrl = new AbortController();
+
+        const run = async () => {
+          try {
+            await self.connect();
+            if (self._abortCtrl.signal.aborted) return;
+            if (self._runSubscriber) {
+              error?.(new Error("上一段运行尚未结束"));
+              return;
+            }
+            self._runSubscriber = { next, complete, error };
+            const runId = uid("run");
+            self._ws.send(
+              JSON.stringify({
+                op: "run",
+                agentId: self.agentId,
+                threadId: self.threadId,
+                runId,
+                messages,
+                tools,
+                context,
+                state,
+              }),
+            );
+          } catch (err) {
+            error?.(err);
+          }
+        };
+        void run();
+
+        return {
+          unsubscribe: () => {
+            self._abortCtrl?.abort();
+            if (self._runSubscriber && self._ws?.readyState === WebSocket.OPEN) {
+              try {
+                self._ws.send(JSON.stringify({ op: "abort" }));
+              } catch {
+                /* ignore */
+              }
+            }
+            self._runSubscriber = null;
+          },
+        };
+      },
+    };
+  }
+
+  cancel() {
+    this._abortCtrl?.abort();
+    if (this._runSubscriber && this._ws?.readyState === WebSocket.OPEN) {
+      try {
+        this._ws.send(JSON.stringify({ op: "abort" }));
+      } catch {
+        /* ignore */
+      }
+    }
+    this._runSubscriber = null;
+  }
+}
+
 // ─── Mock Agent (本地模拟 AG-UI 事件流) ──────────────────────────
 export class MockAgent {
   constructor({ scenario }) {

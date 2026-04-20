@@ -1,6 +1,17 @@
 export const USE_MOCK =
   import.meta.env.VITE_SRE_AGENT_MOCK === "true" || import.meta.env.VITE_MOCK === "true";
 
+/**
+ * 与 OpenClaw `chat.send` + `sessionKey` 一致：每次 run 只发本轮用户句，由服务端用 `X-OpenClaw-Session-Key` 恢复历史。
+ * 设置 `VITE_SRE_AGENT_FULL_MESSAGES=true` 可回退为拼接完整 messages（直连无会话语义的后端时可用）。
+ */
+export const SRE_SESSION_SCOPED_USER_MESSAGES =
+  import.meta.env.VITE_SRE_AGENT_FULL_MESSAGES !== "true";
+
+/** 默认使用 WebSocket `/api/sre-agent/ws`；设置 `VITE_SRE_AGENT_TRANSPORT=sse` 回退为 HTTP+SSE */
+export const SRE_USE_WEBSOCKET =
+  import.meta.env.VITE_SRE_AGENT_TRANSPORT !== "sse";
+
 export const SKILLS = [
   { key: "k8s", label: "巡检 K8s", icon: "cube", prompt: "请对当前 K8s 集群做一次巡检，列出异常 Pod 和关键事件" },
   { key: "prom", label: "查监控", icon: "chart", prompt: "查询当前集群 CPU 使用率、内存使用率和 5xx 错误率" },

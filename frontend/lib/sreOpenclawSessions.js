@@ -197,7 +197,7 @@ export function sessionListPrimaryLabel(row) {
   return k.length > 40 ? `${k.slice(0, 20)}…${k.slice(-14)}` : k;
 }
 
-function messageContentToString(content) {
+export function messageContentToString(content) {
   if (content == null) return "";
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EventType, HttpAgent, uid } from "./agui.js";
-import { runOpenClawSessionFollowUpPoll } from "./sreAgentSessionFollowUp.js";
+import { EventType, HttpAgent, WsAgent, uid } from "./agui.js";
+import {
+  SRE_SESSION_SCOPED_USER_MESSAGES,
+  SRE_USE_WEBSOCKET,
+  USE_MOCK,
+} from "../pages/sre-agent/constants.js";
+import { mergeChatWithSessionHistory, runOpenClawSessionFollowUpPoll } from "./sreAgentSessionFollowUp.js";
 import { normalizeConfirmPayload, parseAssistantConfirmSources } from "./aguiConfirmBlock.js";
 import { extractSreVizWorkQueue } from "./sreMessageVizExtract.js";
 import { sreVizModelToPanel } from "./sreVizModelToPanel.js";
@@ -40,7 +45,12 @@ const applyJsonPatch = (obj, patches) => {
   return copy;
 };
 
-export default function useAgui(agent) {
+/**
+ * @param {import("./agui.js").HttpAgent | import("./agui.js").WsAgent | import("./agui.js").MockAgent} agent
+ * @param {{ openClawSessionKey?: string | null }} [options] - 侧边栏打开的 OpenClaw 会话 key；与本地 messages 共同决定是否处于「会话界面」以建立 WS 长连接并轮询
+ */
+export default function useAgui(agent, options = {}) {
+  const { openClawSessionKey = null } = options;
   const [messages, setMessages] = useState([]);
   const [toolCalls, setToolCalls] = useState({});
   const [steps, setSteps] = useState([]);
@@ -49,6 +59,12 @@ export default function useAgui(agent) {
   const [confirm, setConfirm] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState(null);
+
+  const chatSurfaceActive =
+    SRE_USE_WEBSOCKET &&
+    !USE_MOCK &&
+    agent instanceof WsAgent &&
+    (messages.length > 0 || Boolean(openClawSessionKey));
 
   const subRef = useRef(null);
   const msgBufRef = useRef({});
@@ -187,7 +203,17 @@ export default function useAgui(agent) {
 
       // ── Custom: workspace + confirm + A2UI ─────────────────
       case EventType.CUSTOM:
-        if (event.name === "workspace") {
+        if (event.name === "openclaw_session_detail") {
+          const v = event.value;
+          if (
+            v &&
+            (v.incremental === true ||
+              (Array.isArray(v.tailMessages) && v.tailMessages.length > 0) ||
+              v.detail)
+          ) {
+            setMessages((prev) => mergeChatWithSessionHistory(prev, v));
+          }
+        } else if (event.name === "workspace") {
           handleWorkspaceEvent(event.value);
         } else if (event.name === "confirm") {
           const normalized = normalizeConfirmPayload(event.value, () => uid("cfm"));
@@ -203,6 +229,32 @@ export default function useAgui(agent) {
         break;
     }
   }, []);
+
+  useEffect(() => {
+    if (!chatSurfaceActive) return undefined;
+    let cancelled = false;
+    void agent
+      .connect()
+      .then(() => {
+        if (cancelled) return;
+        if (agent instanceof WsAgent) {
+          agent.startSessionPoll({
+            intervalMs: 3000,
+            onEvent: processEvent,
+          });
+        }
+      })
+      .catch(() => {
+        /* 建连失败时无 WS 降级 */
+      });
+    return () => {
+      cancelled = true;
+      if (agent instanceof WsAgent) {
+        agent.stopSessionPoll();
+        agent.disconnect();
+      }
+    };
+  }, [chatSurfaceActive, agent, processEvent]);
 
   const handleWorkspaceEvent = (payload) => {
     const { action } = payload;
@@ -246,17 +298,23 @@ export default function useAgui(agent) {
       setConfirm(null);
       setStatus("running");
 
-      // Send full conversation history (not just latest message) for multi-turn agents
-      const allMessages = [...messagesRef.current, userMsg].map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-      }));
+      const sendFullHistory = USE_MOCK || !SRE_SESSION_SCOPED_USER_MESSAGES;
+      const payloadMessages = sendFullHistory
+        ? [...messagesRef.current, userMsg].map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+          }))
+        : [{ id: userMsg.id, role: "user", content: userMsg.content }];
 
-      abortSessionFollowUp();
+      if (agent instanceof WsAgent) {
+        agent.stopSessionPoll();
+      } else {
+        abortSessionFollowUp();
+      }
 
       subRef.current?.unsubscribe();
-      subRef.current = agent.runAgent({ messages: allMessages }).subscribe({
+      subRef.current = agent.runAgent({ messages: payloadMessages }).subscribe({
         next: processEvent,
         error: (err) => {
           setStatus("error");
@@ -264,6 +322,7 @@ export default function useAgui(agent) {
         },
         complete: () => {
           setStatus((prev) => (prev === "error" ? "error" : "idle"));
+          abortSessionFollowUp();
           if (agent instanceof HttpAgent) {
             const ac = new AbortController();
             sessionFollowUpAbortRef.current = ac;
@@ -274,21 +333,33 @@ export default function useAgui(agent) {
               setMessages,
               signal: ac.signal,
             });
+          } else if (agent instanceof WsAgent && chatSurfaceActive) {
+            agent.startSessionPoll({
+              intervalMs: 3000,
+              onEvent: processEvent,
+            });
           }
         },
       });
     },
-    [agent, processEvent, abortSessionFollowUp],
+    [agent, processEvent, abortSessionFollowUp, chatSurfaceActive],
   );
 
   const cancel = useCallback(() => {
+    if (agent instanceof WsAgent) {
+      agent.stopSessionPoll();
+    }
     abortSessionFollowUp();
     subRef.current?.unsubscribe();
     setStatus("idle");
-  }, [abortSessionFollowUp]);
+  }, [abortSessionFollowUp, agent]);
 
   const reset = useCallback(() => {
     abortSessionFollowUp();
+    if (agent instanceof WsAgent) {
+      agent.stopSessionPoll();
+      agent.disconnect();
+    }
     subRef.current?.unsubscribe();
     setMessages([]);
     setToolCalls({});
@@ -299,7 +370,7 @@ export default function useAgui(agent) {
     setStatus("idle");
     setError(null);
     msgBufRef.current = {};
-  }, [abortSessionFollowUp]);
+  }, [abortSessionFollowUp, agent]);
 
   const stripMsgVizPanels = (prev) => prev.filter((p) => !String(p.id).startsWith("msg-viz-"));
 
@@ -346,6 +417,9 @@ export default function useAgui(agent) {
   /** 从历史会话载入消息（不触发 Agent 运行） */
   const hydrateMessages = useCallback((list) => {
     abortSessionFollowUp();
+    if (agent instanceof WsAgent) {
+      agent.disconnect();
+    }
     subRef.current?.unsubscribe();
     msgBufRef.current = {};
     setToolCalls({});
@@ -370,7 +444,7 @@ export default function useAgui(agent) {
         };
       }),
     );
-  }, [abortSessionFollowUp]);
+  }, [abortSessionFollowUp, agent]);
 
   return {
     messages,

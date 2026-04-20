@@ -171,7 +171,7 @@ function isOpenClawGatewayBaseUrl(baseUrl) {
  * 续接 OpenClaw 列表会话时为 Gateway 的 session key。
  * @see https://docs.openclaw.ai/tools/thinking — `/think:`、`/reasoning:` 行内指令
  */
-function isEphemeralAppThreadId(sessionKey) {
+export function isEphemeralAppThreadId(sessionKey) {
   const s = String(sessionKey ?? "").trim();
   return /^thread_\d+_/i.test(s) || /^opsRobot_thread_\d+_/i.test(s);
 }
@@ -180,7 +180,7 @@ function isEphemeralAppThreadId(sessionKey) {
  * 新建对话时前端用 `opsRobot_thread_${ts}_…`（或兼容 `thread_${ts}_…`）作为 threadId；发往 Gateway 时映射为
  * `agent:<agentId>:<原 thread 串>`，既绑定所选 agent，又为每条新会话保留独立 thread 段。
  */
-function resolveGatewaySessionKeyForChat(sessionKey, agentId) {
+export function resolveGatewaySessionKeyForChat(sessionKey, agentId) {
   const sk = sessionKey != null ? String(sessionKey).trim() : "";
   if (!sk) return "";
   if (!isEphemeralAppThreadId(sk)) return sk;
@@ -191,12 +191,13 @@ function resolveGatewaySessionKeyForChat(sessionKey, agentId) {
 
 /**
  * 是否对当前请求注入 OpenClaw 思考 / 推理可见性指令（仅改发往 Gateway 的副本，不写回 AG-UI）。
- * - 默认：仅对「非应用内临时 thread id」的会话（从 OpenClaw 打开的历史）注入。
+ * - 默认：**不注入**（与 OpenClaw UI 中用户原文一致）。
+ * - `OPENCLAW_SESSION_THINKING_SCOPE=openclaw_session`：仅对「非应用内临时 thread」会话（如从 OpenClaw 打开的历史）注入。
  * - `OPENCLAW_SESSION_THINKING_SCOPE=all`：任意非空 sessionKey（含新建 thread）也注入。
  */
 function shouldInjectOpenClawSessionDirectives(sessionKey) {
   const sk = String(sessionKey ?? "").trim();
-  const scope = String(process.env.OPENCLAW_SESSION_THINKING_SCOPE ?? "openclaw_session")
+  const scope = String(process.env.OPENCLAW_SESSION_THINKING_SCOPE ?? "off")
     .trim()
     .toLowerCase();
   if (scope === "off" || scope === "false" || scope === "0") return false;
@@ -226,6 +227,24 @@ function resolveSessionReasoningLevel() {
 /**
  * 在发往 OpenClaw Gateway 的 messages 副本上注入 `/think:`、`/reasoning:`（仅最后一条 user，且 tool 续写轮次不注入）。
  */
+/**
+ * OpenClaw Gateway：历史由 `X-OpenClaw-Session-Key` 绑定，请求体只需本轮 user（与官方 `chat.send` 行为一致）。
+ * 非 Gateway（如直连 Ollama）无会话恢复语义，须保留 input 中的完整多轮 messages。
+ * 设置 `OPENCLAW_SEND_FULL_MESSAGES=1` 可强制不折叠（调试或与旧客户端对齐）。
+ */
+function collapseToLatestUserForGatewaySession(config, threadId, userMessages) {
+  const full =
+    process.env.OPENCLAW_SEND_FULL_MESSAGES === "1" ||
+    process.env.OPENCLAW_SEND_FULL_MESSAGES === "true";
+  if (full) return userMessages;
+  if (!isOpenClawGatewayBaseUrl(config.baseUrl)) return userMessages;
+  const sk = resolveGatewaySessionKeyForChat(String(threadId ?? ""), config.agentId);
+  if (!sk) return userMessages;
+  const users = userMessages.filter((m) => m.role === "user");
+  if (users.length === 0) return userMessages;
+  return [users[users.length - 1]];
+}
+
 function injectOpenClawSessionChatDirectives(messages, sessionKey, baseUrl) {
   if (!Array.isArray(messages) || messages.length === 0) return messages;
   if (!isOpenClawGatewayBaseUrl(baseUrl) || !shouldInjectOpenClawSessionDirectives(sessionKey)) {
@@ -337,8 +356,9 @@ let _chatCompletionsPath = null;
  * @param {object} input - AG-UI RunAgentInput
  * @param {(event: object) => void} emit - 发送 AG-UI SSE 事件
  * @param {AbortSignal} [signal] - 用于取消请求
+ * @param {{ suppressRunFinished?: boolean }} [opts] - 为 true 时不发 RUN_FINISHED（由 WS 层在会话 follow-up 后统一发送）
  */
-export async function runSreAgent(input, emit, signal) {
+export async function runSreAgent(input, emit, signal, opts = {}) {
   const envConfig = getConfig();
   const reqAgent =
     input?.agentId != null && String(input.agentId).trim() !== ""
@@ -364,10 +384,15 @@ export async function runSreAgent(input, emit, signal) {
   trackedEmit({ type: EventType.STEP_STARTED, stepName: "理解意图", detail: "解析用户指令，规划执行步骤" });
 
   try {
-    const userMessages = (input.messages || []).map((m) => ({
+    const userMessagesRaw = (input.messages || []).map((m) => ({
       role: m.role === "user" ? "user" : m.role === "assistant" ? "assistant" : "user",
       content: m.content,
     }));
+    const userMessages = collapseToLatestUserForGatewaySession(
+      config,
+      threadId,
+      userMessagesRaw,
+    );
 
     const chatMessages = isExternalAgent
       ? userMessages
@@ -389,11 +414,17 @@ export async function runSreAgent(input, emit, signal) {
       emitFallbackWorkspacePanel(trackedEmit);
     }
 
-    trackedEmit({ type: EventType.RUN_FINISHED, threadId, runId });
+    if (!opts?.suppressRunFinished) {
+      trackedEmit({ type: EventType.RUN_FINISHED, threadId, runId });
+    }
+    return { ok: true, threadId, runId };
   } catch (err) {
-    if (err.name === "AbortError") return;
+    if (err.name === "AbortError") {
+      return { ok: false, aborted: true };
+    }
     console.error("[sre] Error:", err.message);
     trackedEmit({ type: EventType.RUN_ERROR, message: err.message || String(err) });
+    return { ok: false };
   }
 }
 

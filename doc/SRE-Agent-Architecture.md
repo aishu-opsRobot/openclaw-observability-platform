@@ -9,12 +9,14 @@
 | 层级 | 职责 |
 |------|------|
 | **前端 UI** | `frontend/pages/sre-agent/index.jsx`（编排）与 `frontend/pages/sre-agent/components/*`（落地页、会话侧栏、聊天工作区等）：左侧对话、Agent 选择、思考链、Markdown；`WorkspaceRenderer`：右侧工作区面板 |
-| **AG-UI 客户端** | `frontend/lib/agui.js` 中 `HttpAgent`：`POST /api/sre-agent`，读取 **SSE**，解析为 AG-UI 事件 |
+| **AG-UI 客户端** | `frontend/lib/agui.js`：`HttpAgent`（`POST /api/sre-agent` + **SSE**）或 **`WsAgent`（`WebSocket` `/api/sre-agent/ws`，默认）**；二者输出同一套 AG-UI JSON 事件 |
 | **状态机** | `frontend/lib/useAgui.js`：将事件聚合为 `messages` / `steps` / `workspacePanels` / `agentState` 等 |
-| **Node 桥接** | `backend/sre-agent/sre-agent-handler.mjs`：HTTP → SSE；`backend/sre-agent/openclaw-client.mjs` 中 `runSreAgent` |
+| **Node 桥接** | `sre-agent-handler.mjs`：HTTP → SSE；`sre-agent-ws.mjs`：**WebSocket** 长连接，帧 → 同一 `runSreAgent`（`RUN_FINISHED` 在流结束后立即下发；**不**在服务端阻塞会话 follow-up）；`openclaw-server-session-followup.mjs` 保留为可复用模块，**默认 WS 路径不再调用** |
 | **OpenClaw** | `POST {OPENCLAW_API_URL}/v1/chat/completions`（流式；**OpenClaw Gateway 默认关闭该 HTTP 端点**，需在网关配置中开启，见下文）；可选 `GET` 系列路径列举 Agent（由 `handleListAgents` 代理） |
 
-前后端之间使用 **AG-UI 事件流**，经 **Server-Sent Events (SSE)** 传输；后端将 OpenClaw 的 **Chat Completions 流式响应** 翻译为 AG-UI 事件。
+前后端之间使用 **AG-UI 事件流**。默认经 **WebSocket**（`ws://` / `wss://`）逐帧发送 JSON；可选回退 **SSE**（`VITE_SRE_AGENT_TRANSPORT=sse`）。后端将 OpenClaw 的 **Chat Completions 流式响应** 翻译为 AG-UI 事件。在 **OpenClaw Gateway** 下：`HttpAgent` 在每次 `run` 结束后由前端 **`sreAgentSessionFollowUp.js` 经 HTTP** 轮询 `GET /api/openclaw/sessions/:key` 并合并。**`WsAgent`** 在进入会话界面 **`connect()`** 后由 **`startSessionPoll`** 约每 3s 经 **同一条 WebSocket** 发送 **`op: "poll_session"`**；Node 拉取 Gateway 会话历史，若有变化则 **`CUSTOM` / `name: openclaw_session_detail`** 推回，前端用 **`mergeChatWithSessionHistory`** 做增量合并。**用户发送消息至 `RUN_FINISHED` 期间** `stopSessionPoll`，结束后再 **`startSessionPoll`**；离开会话时 **`disconnect()`**。
+
+**连接时机**：进入会话界面（有消息或已打开侧边栏历史会话）即 **`WsAgent.connect()`** 建长连接；`runAgent` 在同一条 WebSocket 上发送 `op: "run"`。落地页不建连。
 
 ---
 
@@ -43,9 +45,16 @@ sequenceDiagram
     Note over API: 若无 workspace 事件则 emitFallbackWorkspacePanel
 ```
 
+### 传输切换
+
+| 环境变量 | 行为 |
+|----------|------|
+| （默认） | `WsAgent` → 长连接 `WebSocket` `/api/sre-agent/ws`；`op: "run"` 流式；`op: "poll_session"` + `CUSTOM openclaw_session_detail` 会话增量；运行中暂停 poll（见上文） |
+| `VITE_SRE_AGENT_TRANSPORT=sse` | `HttpAgent` → `POST /api/sre-agent` + SSE；每次 run 结束后由 `sreAgentSessionFollowUp.js` 轮询合并 |
+
 ### 要点
 
-1. **请求体**（`HttpAgent`）：包含 `agentId`（前端所选 OpenClaw Agent）、`threadId`、`messages` 等。
+1. **请求体**（`HttpAgent` / `WsAgent`）：包含 `agentId`（前端所选 OpenClaw Agent）、`threadId`、`messages` 等。
 2. **`runSreAgent`**：依次发出 `RUN_STARTED`、`STEP_STARTED` 等；调用 `callOpenClawStream`，再经 `processStreamResponse` 将 token / tool 等转为 `TEXT_MESSAGE_*`、`TOOL_CALL_*`、`CUSTOM` 等事件。
 3. **内置 Agent vs 外部 Agent**：当 `agentId !== "sre-agent"` 时，**不注入** 本地 `SYSTEM_PROMPT` / `SRE_TOOLS`，完全使用 OpenClaw 侧已配置的技能与提示。
 4. **调用 OpenClaw**：使用 `Authorization: Bearer`、`X-OpenClaw-Agent-Id`、请求体中的 `agent_id` 等，与 OpenClaw Chat API 约定一致。
@@ -59,8 +68,9 @@ sequenceDiagram
 | `RUN_STARTED` / `RUN_FINISHED` / `RUN_ERROR` | 运行状态、错误提示 |
 | `STEP_STARTED` / `STEP_FINISHED` | 左侧「Agent 思考过程」可展开步骤 |
 | `TEXT_MESSAGE_*` | 助手气泡（Markdown，如 `@ant-design/x-markdown`） |
+| `MESSAGES_SNAPSHOT` | 全量替换左侧消息列表（若其它路径下发） |
 | `TOOL_CALL_*` | 工具调用指示器 |
-| `CUSTOM`（`workspace` / `surfaceUpdate` / `dataModelUpdate`） | 右侧工作区面板、A2UI 表面与数据模型 |
+| `CUSTOM`（`openclaw_session_detail` / `workspace` / `surfaceUpdate` / `dataModelUpdate`） | `openclaw_session_detail`：WS 会话轮询推送，与本地列表合并；其余为工作区与 A2UI |
 
 若流式结束后仍无结构化 workspace 事件，后端会执行 **`emitFallbackWorkspacePanel`**：从累积文本解析表格、代码块、A2UI 块，以及可选的指标/Pod 等实时面板。
 
@@ -103,7 +113,7 @@ flowchart LR
 
 - **开发**：Vite 插件 `vite-plugins/agentSessionsDevApi.mjs` 将 `/api/*` 路由到上述 handler；根目录 `.env` 通过 `vite.config.js`（`loadEnv`）与 `backend/env-bootstrap.mjs` 注入 `OPENCLAW_API_URL`、`OPENCLAW_API_KEY`、`OPENCLAW_AGENT_ID`、`OPENCLAW_MODEL`、`OPENCLAW_GATEWAY`、`OPENCLAW_HTTP_MODEL`、`OPENCLAW_CHAT_PATH` 等。
 - **预览 / 独立 API**：`node backend/serveAgentSessionsApi.mjs`（默认端口见 `PORT`，常为 8787）；`vite.config.js` 中 `preview.proxy` 可将 `/api` 转发到该服务。
-- **容器 / Nginx**：示例见仓库根目录 `nginx.conf`，将 `/api/sre-agent` 等代理到后端并保持 SSE 相关头与缓冲关闭。
+- **容器 / Nginx**：示例见仓库根目录 `nginx.conf`，将 `/api/sre-agent` 等代理到后端并保持 SSE 相关头与缓冲关闭；若使用 WebSocket，需对 `/api/sre-agent/ws` 配置 `Upgrade` / `Connection` 转发。
 
 ---
 
@@ -116,6 +126,7 @@ flowchart LR
 | 事件归约 | `frontend/lib/useAgui.js` |
 | Agent 列表（前端） | `frontend/lib/sreAgentCatalog.js` |
 | HTTP + SSE | `backend/sre-agent/sre-agent-handler.mjs` |
+| WebSocket | `backend/sre-agent/sre-agent-ws.mjs`（`op: "run"` / `op: "abort"` / `op: "poll_session"`）；`poll_session` 内联 `openclaw-session-history-fetch.mjs`；`openclaw-server-session-followup.mjs` 可复用，默认 WS 不调用 |
 | OpenClaw 流与兜底面板 | `backend/sre-agent/openclaw-client.mjs` |
 | 开发中间件 | `vite-plugins/agentSessionsDevApi.mjs` |
 | 独立 HTTP 服务 | `backend/serveAgentSessionsApi.mjs` |
@@ -124,4 +135,4 @@ flowchart LR
 
 ## 7. 一句话归纳
 
-**SRE Agent 执行架构 = 浏览器以 AG-UI 语义经 SSE 连接本仓库 Node 桥接层，桥接层将 OpenClaw 流式 Chat API 转为 AG-UI 事件，并可在无结构化 workspace 时从纯文本生成工作区面板；对话目标 Agent 由前端 `agentId` 与环境默认 `OPENCLAW_AGENT_ID` 共同决定。**
+**SRE Agent 执行架构 = 浏览器以 AG-UI 语义经默认 WebSocket 长连接（或可选 SSE）连接本仓库 Node 桥接层，桥接层将 OpenClaw 流式 Chat API 转为 AG-UI 事件；Gateway 下 `WsAgent` 经 WS `poll_session` 询问并由服务端推送 `openclaw_session_detail`，`HttpAgent` 仍用 HTTP 轮询合并。对话目标 Agent 由前端 `agentId` 与环境默认 `OPENCLAW_AGENT_ID` 共同决定。**

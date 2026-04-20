@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dispatchUserAction } from "../../lib/a2ui.js";
-import { MockAgent, HttpAgent, newOpsRobotThreadId } from "../../lib/agui.js";
+import { MockAgent, HttpAgent, WsAgent, newOpsRobotThreadId } from "../../lib/agui.js";
 import { matchScenario } from "../../lib/agui-mock-scenarios.js";
 import { readStoredAgentId, STATIC_FALLBACK_CATALOG, writeStoredAgentId } from "../../lib/sreAgentCatalog.js";
 import {
@@ -16,6 +16,7 @@ import {
   CHAT_SPLIT_MIN,
   CHAT_SPLIT_STORAGE_KEY,
   USE_MOCK,
+  SRE_USE_WEBSOCKET,
   WORKSPACE_MIN_WIDTH,
 } from "./constants.js";
 import { useAgentCatalog } from "./hooks/useAgentCatalog.js";
@@ -118,6 +119,12 @@ export default function SreAgent() {
         },
       });
     }
+    if (SRE_USE_WEBSOCKET) {
+      return new WsAgent({
+        agentId: selectedAgentId,
+        threadId: sessionThreadId,
+      });
+    }
     return new HttpAgent({
       url: "/api/sre-agent",
       agentId: selectedAgentId,
@@ -130,7 +137,7 @@ export default function SreAgent() {
     status, error, sendMessage, respondConfirm, cancel, reset: resetAgui, hydrateMessages,
     abortSessionFollowUp,
     openSreVizQueueItem,
-  } = useAgui(agent);
+  } = useAgui(agent, { openClawSessionKey: activeOpenClawSessionKey });
 
   const resetConversation = useCallback(() => {
     setActiveOpenClawSessionKey(null);

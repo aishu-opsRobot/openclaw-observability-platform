@@ -11,6 +11,7 @@ import {
   isOpenClawSessionsPath,
 } from "../backend/sre-agent/sre-agent-handler.mjs";
 import { handleSreVizFileMiddleware, isSreVizJsonPath } from "../backend/sre-agent/sre-viz-file-handler.mjs";
+import { attachSreAgentWebSocket } from "../backend/sre-agent/sre-agent-ws.mjs";
 import { queryAuditDashboardMetrics } from "../backend/security-audit/audit-dashboard-query.mjs";
 import { queryCostOverviewSnapshot } from "../backend/cost-analysis/cost-overview-query.mjs";
 import {
@@ -80,6 +81,9 @@ export function agentSessionsDevApi() {
   return {
     name: "agent-sessions-dev-api",
     configureServer(server) {
+      if (server.httpServer) {
+        attachSreAgentWebSocket(server.httpServer);
+      }
       server.middlewares.use(async (req, res, next) => {
         const url = req.url || "";
         const path = requestPathname(url);
@@ -110,6 +114,10 @@ export function agentSessionsDevApi() {
               sendJson(res, 500, { error: String(e?.message || e) });
             }
           });
+          return;
+        }
+        if (path === "/api/sre-agent/ws") {
+          sendJson(res, 404, { error: "WebSocket only — use ws:// on this path" });
           return;
         }
         if (path.startsWith("/api/sre-agent") && req.method === "POST") {
