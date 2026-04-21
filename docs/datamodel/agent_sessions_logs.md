@@ -5,7 +5,7 @@
 
 | 数据名称 | Agent 会话日志                                                                                                                                                                                                                                                                                                                                                                         |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 原始路径 | OpenClaw Agent会话日志：/openclaw/workspace/sessions/logs                                                                                                                                                                                                                                                                                                                               |
+| 原始路径 | `~/openclaw/agents/{agentName}/sessionS/{sessionid}.jsonl`                                                                                                                                                                                                                                                                                                                         |
 | 数据内容 | 记录 OpenClaw 中 Agent 会话全生命周期事件，包含会话创建、模型切换、消息交互、工具调用、错误日志、Token 消耗等全量信息                                                                                                                                                                                                                                                                                                             |
 | 数据库  | opsRobot                                                                                                                                                                                                                                                                                                                                                                           |
 | 数据表  | agent_sessions_logs                                                                                                                                                                                                                                                                                                                                                                |
@@ -51,28 +51,28 @@
 ## 22 JSON 扩展字段（logattributes）
 
 
-| 子字段路径                   | 字段类型   | 字段说明     | 字段示例                                                                                                                                  |
-| ----------------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| cwd                     | string | 工作目录     | /Users/mac/openclaw/workspace                                                                                                         |
-| id                      | string | 日志唯一标识   | c2d22601c4344c62a149d4332f78fee9                                                                                                      |
-| type                    | string | 日志细分类型   | session、modelchange、thinkinglevelchange                                                                                               |
-| customType              | string | 自定义类型    | modelsnapshot、openclaw:bootstrapcontext:full                                                                                          |
-| datamodelApi            | string | 模型 API   | anthropicmessages                                                                                                                     |
-| datamodelId             | string | 模型 ID    | MiniMaxM25                                                                                                                            |
-| dataprovider            | string | 模型提供方    | minimaxcn                                                                                                                             |
-| messagecontent          | array  | 消息内容数组   | 34;text34;:34;你好34;,34;type34;:34;text34;,34;thinking34;:34;用户打招呼，友好回复34;,34;type34;:34;thinking34;                                   |
-| messagerole             | string | 消息角色     | user、assistant                                                                                                                        |
-| messageapi              | string | 调用接口     | anthropicmessages                                                                                                                     |
-| messagestopReason       | string | 停止原因     | stop、toolUse                                                                                                                          |
-| messageusageinput       | bigint | 输入 Token | 8755                                                                                                                                  |
-| messageusageoutput      | bigint | 输出 Token | 165                                                                                                                                   |
-| messageusagetotalTokens | bigint | 总 Token  | 9000                                                                                                                                  |
-| thinking                | string | 模型思考过程   | 用户说“你好”，应友好回复                                                                                                                         |
-| thinkingSignature       | string | 思考签名     | 644c57b78acce5a1abf1cfceac2c5564a3d2e7f890123456789abcdef12345678                                                                     |
-| text                    | string | 回复文本     | 你好！👋                                                                                                                                 |
-| arguments               | object | 工具执行参数   | 34;command34;:34;curl s [http://localhost:18060/health34;,34;timeout34;:10](http://localhost:18060/health&#34;,&#34;timeout&#34;:10}) |
-| name                    | string | 工具名称     | exec、write、read                                                                                                                       |
-| details                 | object | 执行详情     | 34;pid34;:83241,34;status34;:34;running34;,34;durationMs34;:43                                                                        |
+| 子字段路径                   | 字段类型   | 字段说明     | 字段示例                                                                                                                      |
+| ----------------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| cwd                     | string | 工作目录     | /Users/mac/openclaw/workspace                                                                                             |
+| id                      | string | 日志唯一标识   | c2d22601c4344c62a149d4332f78fee9                                                                                          |
+| type                    | string | 日志细分类型   | session、modelchange、thinkinglevelchange                                                                                   |
+| customType              | string | 自定义类型    | modelsnapshot、openclaw:bootstrapcontext:full                                                                              |
+| datamodelApi            | string | 模型 API   | anthropicmessages                                                                                                         |
+| datamodelId             | string | 模型 ID    | MiniMaxM25                                                                                                                |
+| dataprovider            | string | 模型提供方    | minimaxcn                                                                                                                 |
+| messagecontent          | array  | 消息内容数组   | 34;text34;:34;你好34;,34;type34;:34;text34;,34;thinking34;:34;用户打招呼，友好回复34;,34;type34;:34;thinking34;                       |
+| messagerole             | string | 消息角色     | user、assistant                                                                                                            |
+| messageapi              | string | 调用接口     | anthropicmessages                                                                                                         |
+| messagestopReason       | string | 停止原因     | stop、toolUse                                                                                                              |
+| messageusageinput       | bigint | 输入 Token | 8755                                                                                                                      |
+| messageusageoutput      | bigint | 输出 Token | 165                                                                                                                       |
+| messageusagetotalTokens | bigint | 总 Token  | 9000                                                                                                                      |
+| thinking                | string | 模型思考过程   | 用户说“你好”，应友好回复                                                                                                             |
+| thinkingSignature       | string | 思考签名     | 644c57b78acce5a1abf1cfceac2c5564a3d2e7f890123456789abcdef12345678                                                         |
+| text                    | string | 回复文本     | 你好！👋                                                                                                                     |
+| arguments               | object | 工具执行参数   | 34;command34;:34;curl s [http://localhost:18060/health34;,34;timeout34;:10](http://localhost:18060/health","timeout":10}) |
+| name                    | string | 工具名称     | exec、write、read                                                                                                           |
+| details                 | object | 执行详情     | 34;pid34;:83241,34;status34;:34;running34;,34;durationMs34;:43                                                            |
 
 
 # 三、使用示例（Doris SQL）
