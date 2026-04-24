@@ -11,10 +11,10 @@ function dayStr(offsetDays = 0) {
 export function mockLlmCostDetail(startDay, endDay, isSummary = false) {
   const models = [
     { model: "gpt-4o-mini", provider: "openai" },
-    { model: "claude-3-5-sonnet", provider: "anthropic" },
-    { model: "MiniMax-M2.5", provider: "minimax-cn" },
-    { model: "deepseek-r1", provider: "deepseek" },
-    { model: "qwen-turbo", provider: "alibaba" },
+    { model: "Opus 4.6", provider: "anthropic" },
+    { model: "MiniMax-M2.7", provider: "minimax-cn" },
+    { model: "Gemini 3.1 Pro", provider: "google" },
+    { model: "GLM 5.1", provider: "zhipuai" },
   ];
 
   if (isSummary) {

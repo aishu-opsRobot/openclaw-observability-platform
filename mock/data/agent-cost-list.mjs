@@ -22,8 +22,8 @@ export function mockAgentCostList(startDay, endDay) {
         modelBill: 140.00,
       },
       modelDist: [
-        { name: "gpt-4o", tokens: 2240000, pct: 80, cost: 112.00 },
-        { name: "qwen-turbo", tokens: 560000, pct: 20, cost: 28.00 },
+        { name: "Gemini 3.1 Pro", tokens: 2240000, pct: 80, cost: 112.00 },
+        { name: "GLM 5.1", tokens: 560000, pct: 20, cost: 28.00 },
       ],
       trend: [20, 35, 25, 45, 30, 55, 40],
       drill: [
@@ -48,7 +48,7 @@ export function mockAgentCostList(startDay, endDay) {
         modelBill: 80.00,
       },
       modelDist: [
-        { name: "gpt-4o", tokens: 1600000, pct: 100, cost: 80.00 },
+        { name: "Gemini 3.1 Pro", tokens: 1600000, pct: 100, cost: 80.00 },
       ],
       trend: [10, 15, 12, 18, 20, 18, 22],
       drill: [
@@ -73,8 +73,8 @@ export function mockAgentCostList(startDay, endDay) {
         modelBill: 60.00,
       },
       modelDist: [
-        { name: "gpt-4o", tokens: 840000, pct: 70, cost: 42.00 },
-        { name: "qwen-turbo", tokens: 360000, pct: 30, cost: 18.00 },
+        { name: "Gemini 3.1 Pro", tokens: 840000, pct: 70, cost: 42.00 },
+        { name: "GLM 5.1", tokens: 360000, pct: 30, cost: 18.00 },
       ],
       trend: [5, 8, 12, 7, 10, 15, 12],
       drill: [

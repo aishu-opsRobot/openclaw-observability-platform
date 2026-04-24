@@ -618,7 +618,7 @@ export default function Dashboard() {
           ) : activeNav === "cost-overview" ? (
             <CostAnalysis />
           ) : activeNav === "cost-overview-2" ? (
-            <CostOverview2 />
+            <CostOverview2 params={navParams} />
           ) : activeNav === "agent-cost-detail" ? (
             <AgentCostDetail params={navParams} />
           ) : activeNav === "llm-cost" ? (

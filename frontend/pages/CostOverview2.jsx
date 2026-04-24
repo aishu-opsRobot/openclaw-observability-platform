@@ -309,15 +309,30 @@ export default function CostOverview2({ params }) {
     sessionId: "",
   });
 
-  // Handle incoming params (drill-down from other pages)
   useEffect(() => {
     if (params) {
-      setFilters(f => ({
-        ...f,
-        statuses: params.status ? [params.status] : f.statuses,
-        agents: params.agents ? params.agents : f.agents,
-        models: params.model ? [params.model] : f.models,
-      }));
+      setFilters(f => {
+        const next = {
+          ...f,
+          agents: [],
+          users: [],
+          gateways: [],
+          models: [],
+          statuses: [],
+          sessionId: "",
+        };
+        // If drill-down params are provided, they take precedence
+        if (params.agents) {
+          next.agents = params.agents;
+        }
+        if (params.model) {
+          next.models = [params.model];
+        }
+        if (params.status) {
+          next.statuses = [params.status];
+        }
+        return next;
+      });
     }
   }, [params]);
 
