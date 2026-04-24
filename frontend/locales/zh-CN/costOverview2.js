@@ -42,4 +42,5 @@ export default {
   "costOverview2.diagnosticPanel.traceOtelSubtitle": "分布式分布式链路追踪",
   "costOverview2.diagnosticPanel.viewReplay": "会话重放 (Beta)",
   "costOverview2.diagnosticPanel.viewReplaySubtitle": "回放 Agent 决策路径",
+  "costOverview2.diagnosticPanel.pricingStrategy": "基于模型计费策略",
 };

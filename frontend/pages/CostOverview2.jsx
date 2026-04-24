@@ -104,7 +104,7 @@ function DiagnosticPanel({ row }) {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{intl.get("costOverview2.diagnosticPanel.estimatedCost")}</span>
               </div>
               <div className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">{fmtCost(row.costYuan)}</div>
-              <div className="text-[10px] text-gray-400">Based on model pricing strategy</div>
+              <div className="text-[10px] text-gray-400">{intl.get("costOverview2.diagnosticPanel.pricingStrategy")}</div>
             </div>
           </div>
         </div>
@@ -117,7 +117,7 @@ function DiagnosticPanel({ row }) {
           <div className="flex w-full flex-col items-center gap-1.5">
              <button
                 onClick={() => window.dispatchEvent(new CustomEvent("openclaw-nav", { detail: { id: "session-audit", params: { sessionId: row.session_id } } }))}
-                className="group flex w-full max-w-[160px] items-center justify-between rounded-lg bg-primary-soft/50 px-3 py-2 text-sm font-medium text-primary transition-all hover:bg-primary hover:text-white dark:bg-primary/10 dark:hover:bg-primary"
+                className="group flex w-full max-w-[200px] items-center justify-between rounded-lg bg-primary-soft px-3 py-2 text-sm font-semibold text-primary transition-all hover:bg-primary hover:text-white dark:bg-primary/20 dark:text-blue-400 dark:hover:bg-primary dark:hover:text-white"
              >
                 <div className="flex items-center gap-2.5">
                    <svg className="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>

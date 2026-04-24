@@ -42,4 +42,5 @@ export default {
   "costOverview2.diagnosticPanel.traceOtelSubtitle": "Distributed tracing link",
   "costOverview2.diagnosticPanel.viewReplay": "Session Replay (Beta)",
   "costOverview2.diagnosticPanel.viewReplaySubtitle": "Replay agent decision path",
+  "costOverview2.diagnosticPanel.pricingStrategy": "Based on model pricing strategy",
 };

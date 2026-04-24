@@ -10,12 +10,14 @@ export function mockSessionCostDetail({
   models = [],
   statuses = [],
   sessionId = "",
+  startDay = "",
+  endDay = "",
 }) {
   const allRows = [];
   const fullAgentPool = ["合规审查官", "数据分析员", "HR 面试助手", "客服助手·小智", "运维巡检员"];
   const fullUserPool = ["张三", "李四", "王五", "赵六", "钱七"];
   const fullGatewayPool = ["api-gateway", "webchat", "feishu", "cron-job", "internal"];
-  const fullModelPool = ["Gemini 3.1 Pro", "Opus 4.6", "GLM 5.1", "MiniMax-M2.7", "gpt-4o-mini"];
+  const fullModelPool = ["Gemini 3.1 Pro", "Opus 4.6", "GLM 5.1", "MiniMax-M2.7", "Gemini 3.1 Flash"];
 
   const REAL_SESSION_IDS = [
     "sess_9988776655443322",
@@ -51,7 +53,7 @@ export function mockSessionCostDetail({
       costYuan: costYuan,
       createTime: new Date(Date.now() - i * 3600000).toISOString().slice(0, 16).replace("T", " "),
       status: i === 1 ? "loop" : (i % 5 === 3 ? "interruption" : (i % 7 === 0 ? "error" : "normal")),
-      stopReason: i === 1 ? "max_tokens (达到模型上限)" : (i % 5 === 3 ? "gateway_timeout" : (i % 7 === 0 ? "model_error" : "stop")),
+      stopReason: i === 1 ? "max_tokens (reached model limit)" : (i % 5 === 3 ? "gateway_timeout" : (i % 7 === 0 ? "model_error" : "stop")),
       stepCount: Math.floor(Math.random() * 10) + 1,
       duration: Math.floor(Math.random() * 60) + 10,
     });

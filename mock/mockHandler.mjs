@@ -79,7 +79,9 @@ export function handleMockRequest(url, res) {
     const page = Number(u.searchParams.get("page") ?? "1");
     const pageSize = Number(u.searchParams.get("pageSize") ?? "20");
     const sessionId = u.searchParams.get("sessionId") || "";
-    sendJson(res, 200, mockSessionCostDetail({ agents, users, gateways, models, statuses, sessionId, page, pageSize }));
+    const startDay = u.searchParams.get("startDay") || "";
+    const endDay = u.searchParams.get("endDay") || "";
+    sendJson(res, 200, mockSessionCostDetail({ agents, users, gateways, models, statuses, sessionId, page, pageSize, startDay, endDay }));
     return true;
   }
 
