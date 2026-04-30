@@ -160,7 +160,7 @@ export default {
   "logSearch.sessionId": "会话 ID",
   "logSearch.traceId": "Trace ID",
   "logSearch.requestId": "Request ID",
-  "logSearch.agentName": "Agent 名称",
+  "logSearch.agentName": "实例名称",
   "logSearch.channel": "Channel",
   "logSearch.module": "网关模块",
   "logSearch.modulePlaceholder": "如 http、router",

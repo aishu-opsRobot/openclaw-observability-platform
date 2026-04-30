@@ -602,17 +602,6 @@ function SessionAuditDetail({ row }) {
                     {intl.get("sessionAudit.worstRisk")}: {auditRiskLabel(rowAudit.worstRiskLevel)}
                   </span>
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  {intl.get("sessionAudit.caseConclusion", {
-                    high: rowAudit.high,
-                    medium: rowAudit.medium,
-                    low: rowAudit.low,
-                    tool: rowAudit.tool,
-                    network: rowAudit.network,
-                    file: rowAudit.file,
-                    exec: rowAudit.exec,
-                  })}
-                </p>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <div className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary-soft/30 px-2 py-1 font-mono text-[10px] font-semibold text-primary">
                     <Icons.Zap />
@@ -637,11 +626,11 @@ function SessionAuditDetail({ row }) {
             >
               <p className="text-[10px] font-bold uppercase tracking-wider text-red-400">{intl.get("sessionAudit.findingCounts")}</p>
               <p className="mt-1 text-sm font-bold">
-                <span className="text-red-600">H{rowAudit.high}</span>
+                <span className="cursor-help text-red-600" title={intl.get("sessionAudit.tooltip.high")}>H{rowAudit.high}</span>
                 <span className="mx-1 text-gray-300">/</span>
-                <span className="text-amber-500">M{rowAudit.medium}</span>
+                <span className="cursor-help text-amber-500" title={intl.get("sessionAudit.tooltip.medium")}>M{rowAudit.medium}</span>
                 <span className="mx-1 text-gray-300">/</span>
-                <span className="text-sky-600">L{rowAudit.low}</span>
+                <span className="cursor-help text-sky-600" title={intl.get("sessionAudit.tooltip.low")}>L{rowAudit.low}</span>
               </p>
             </button>
 
@@ -651,8 +640,14 @@ function SessionAuditDetail({ row }) {
               className="flex h-full min-w-[120px] flex-col items-center justify-center rounded-xl border border-gray-100 bg-gray-50/30 p-3 text-center transition-all hover:bg-white dark:border-gray-800 dark:bg-gray-900/50"
             >
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{intl.get("sessionAudit.keyEvidence")}</p>
-              <p className="mt-1 text-sm font-bold text-gray-900 dark:text-gray-100">
-                T{rowAudit.tool} · N{rowAudit.network} · F{rowAudit.file} · E{rowAudit.exec}
+              <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-gray-900 dark:text-gray-100">
+                <span className="cursor-help" title={intl.get("sessionAudit.tooltip.tool")}>T{rowAudit.tool}</span>
+                <span className="text-gray-300">·</span>
+                <span className="cursor-help" title={intl.get("sessionAudit.tooltip.network")}>N{rowAudit.network}</span>
+                <span className="text-gray-300">·</span>
+                <span className="cursor-help" title={intl.get("sessionAudit.tooltip.file")}>F{rowAudit.file}</span>
+                <span className="text-gray-300">·</span>
+                <span className="cursor-help" title={intl.get("sessionAudit.tooltip.exec")}>E{rowAudit.exec}</span>
               </p>
             </button>
 
@@ -676,7 +671,7 @@ function SessionAuditDetail({ row }) {
 
         {/* Bottom Property Row */}
         <div className="border-t border-gray-50 bg-gray-50/20 px-4 py-2 dark:border-gray-800 dark:bg-gray-900/30">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center text-gray-400 dark:text-gray-500">
                 <Icons.Agent />

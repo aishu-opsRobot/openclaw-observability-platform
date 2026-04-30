@@ -158,6 +158,14 @@ export default {
   "sessionAudit.riskCategory.timelineGap": "Timeline Gap",
   "sessionAudit.riskCategory.explicitRisk": "Audit Rule",
 
+  "sessionAudit.tooltip.high": "High Risk",
+  "sessionAudit.tooltip.medium": "Medium Risk",
+  "sessionAudit.tooltip.low": "Low Risk",
+  "sessionAudit.tooltip.tool": "Tool Calls",
+  "sessionAudit.tooltip.network": "Network Access",
+  "sessionAudit.tooltip.file": "File Operations",
+  "sessionAudit.tooltip.exec": "System Executions",
+
   "sessionAudit.riskPrefix": "Risk · ",
   "sessionAudit.riskHoverReason": "Risk · {label} — Reason: {reason}",
   "sessionAudit.riskHoverNoRule": "Risk · {label} — No risk rule matched on this line (no detail)",

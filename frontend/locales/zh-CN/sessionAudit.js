@@ -9,7 +9,7 @@ export default {
   "sessionAudit.searchPlaceholder": "搜索会话键、会话 ID、Agent、通道、来源、模型…",
   "sessionAudit.securityQueueHint": "按风险优先级组织的审计队列，用于快速分诊需要调查的会话。",
   "sessionAudit.sessionId": "会话 ID",
-  "sessionAudit.agentName": "Agent 名称",
+  "sessionAudit.agentName": "实例名称",
   "sessionAudit.startTime": "开始时间",
   "sessionAudit.endTime": "结束时间",
   "sessionAudit.duration": "持续时间",
@@ -157,6 +157,14 @@ export default {
   "sessionAudit.riskCategory.sensitiveCommand": "敏感命令",
   "sessionAudit.riskCategory.timelineGap": "时间间隔",
   "sessionAudit.riskCategory.explicitRisk": "审计规则",
+
+  "sessionAudit.tooltip.high": "高危风险",
+  "sessionAudit.tooltip.medium": "中危风险",
+  "sessionAudit.tooltip.low": "低危风险",
+  "sessionAudit.tooltip.tool": "工具调用",
+  "sessionAudit.tooltip.network": "网络访问",
+  "sessionAudit.tooltip.file": "文件操作",
+  "sessionAudit.tooltip.exec": "系统执行",
 
   "sessionAudit.riskPrefix": "风险·",
   "sessionAudit.riskHoverReason": "风险·{label} — 原因：{reason}",
