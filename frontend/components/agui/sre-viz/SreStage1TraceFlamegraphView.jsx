@@ -1,10 +1,89 @@
 /**
  * Stage1 `type: stage1_trace_flamegraph`：浅色链路火焰条（左侧虚线树 + 横向比例条 + 右侧耗时/状态）
  */
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Shell } from "./SreVizShell.jsx";
 import { EmbeddedSummaryPanel, embeddedSummaryProseClass } from "./sreEmbeddedVizChrome.jsx";
 import { isStage1TraceFlamegraphPayload, traceTreeScaleMs } from "../../../lib/sreStage1TraceFlamegraph.js";
+
+/** @param {Record<string, unknown>} node */
+function firstDetailString(node) {
+  const keys = ["status_message", "error_message", "exception", "error", "message"];
+  for (const k of keys) {
+    const v = node[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} node
+ * @param {number} scaleMs
+ * @returns {string[]}
+ */
+function buildFlameSpanTooltipLines(node, scaleMs) {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return ["—"];
+  const service = String(node.service || "—").trim() || "—";
+  const operation = String(node.operation || "").trim();
+  const dur = Number(node.duration_ms);
+  const duration = Number.isFinite(dur) ? dur : 0;
+  const status = String(node.status || "—").trim() || "—";
+
+  const lines = [service];
+  if (operation) lines.push(`操作：${operation}`);
+  if (scaleMs > 0) {
+    const pct = (duration / scaleMs) * 100;
+    lines.push(`耗时：${duration}ms（相对根耗时 ${pct.toFixed(1)}%）`);
+  } else {
+    lines.push(`耗时：${duration}ms`);
+  }
+  lines.push(`状态：${status}`);
+
+  const spanId = typeof node.span_id === "string" ? node.span_id.trim() : "";
+  if (spanId) lines.push(`Span ID：${spanId}`);
+  const st = typeof node.start_time === "string" ? node.start_time.trim() : "";
+  if (st) lines.push(`开始时间：${st}`);
+  const traceId = typeof node.trace_id === "string" ? node.trace_id.trim() : "";
+  if (traceId) lines.push(`Trace ID：${traceId}`);
+
+  const extra = firstDetailString(node);
+  if (extra) lines.push(`说明：${extra}`);
+
+  return lines;
+}
+
+/** @param {{ tip: { x: number; y: number; lines: string[] } | null }} props */
+function FlameGraphTooltip({ tip }) {
+  if (!tip?.lines?.length) return null;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 960;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 640;
+  const gap = 12;
+  const maxW = 360;
+  const approxH = 32 + tip.lines.length * 18;
+  const left = Math.max(gap, Math.min(tip.x + gap, vw - maxW - gap));
+  const top = Math.max(gap, Math.min(tip.y + gap, vh - approxH));
+
+  return (
+    <div
+      className="pointer-events-none fixed z-[200] max-w-[min(360px,calc(100vw-24px))] rounded-lg border border-slate-300/80 bg-white/[0.98] px-3 py-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:border-gray-600 dark:bg-gray-950/[0.98] dark:shadow-xl"
+      style={{ left, top }}
+      role="tooltip"
+    >
+      {tip.lines.map((line, i) => (
+        <p
+          key={i}
+          className={
+            i === 0
+              ? "text-[12px] font-semibold leading-snug text-gray-900 dark:text-gray-50"
+              : "mt-1 text-[11px] leading-snug text-gray-600 dark:text-gray-300"
+          }
+        >
+          {line}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 function barFill(node) {
   const c = typeof node?.color === "string" ? node.color.trim() : "";
@@ -103,7 +182,7 @@ function StatusGlyph({ tone }) {
 
 const TREE_LINE = "border-gray-300 dark:border-gray-600";
 
-function FlameSpanRow({ node, scaleMs }) {
+function FlameSpanRow({ node, scaleMs, onSpanEnter, onSpanMove }) {
   if (!node || typeof node !== "object" || Array.isArray(node)) return null;
 
   const dur = Number(node.duration_ms);
@@ -119,12 +198,13 @@ function FlameSpanRow({ node, scaleMs }) {
   const labelCls = STATUS_LABEL_CLASS[tone];
   const statusLabel = String(node.status || "—").trim().toUpperCase() || "—";
 
-  const title =
-    [node.start_time, node.span_id, service, operation].filter(Boolean).join("\n") || undefined;
-
   return (
     <div className="select-text">
-      <div className="flex items-stretch gap-2 py-1">
+      <div
+        className="flex cursor-default items-stretch gap-2 py-1"
+        onMouseEnter={(e) => onSpanEnter?.(node, e)}
+        onMouseMove={(e) => onSpanMove?.(e)}
+      >
         <div className="flex min-w-0 flex-1 items-center">
           <div
             className={`min-w-0 overflow-hidden rounded-lg shadow-sm ${
@@ -147,7 +227,6 @@ function FlameSpanRow({ node, scaleMs }) {
                       boxShadow: "inset 0 1px 0 rgba(255,255,255,0.35)",
                     }
               }
-              title={title}
             >
               <span
                 className={`truncate text-[11px] font-semibold tracking-tight ${async ? "text-gray-800 dark:text-gray-100" : "text-white"}`}
@@ -181,7 +260,7 @@ function FlameSpanRow({ node, scaleMs }) {
                 aria-hidden
               />
               <div className="relative z-[1]">
-                <FlameSpanRow node={ch} scaleMs={scaleMs} />
+                <FlameSpanRow node={ch} scaleMs={scaleMs} onSpanEnter={onSpanEnter} onSpanMove={onSpanMove} />
               </div>
             </div>
           ))}
@@ -192,12 +271,33 @@ function FlameSpanRow({ node, scaleMs }) {
 }
 
 function FlameCard({ traceRoot, scaleMs }) {
+  const [tip, setTip] = useState(null);
+
+  const onSpanEnter = useCallback(
+    (node, e) => {
+      setTip({
+        x: e.clientX,
+        y: e.clientY,
+        lines: buildFlameSpanTooltipLines(node, scaleMs),
+      });
+    },
+    [scaleMs],
+  );
+
+  const onSpanMove = useCallback((e) => {
+    setTip((prev) => (prev ? { ...prev, x: e.clientX, y: e.clientY } : prev));
+  }, []);
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 shadow-sm ring-1 ring-black/[0.04] dark:border-gray-800 dark:bg-gray-950 dark:ring-white/[0.06]">
+    <div
+      className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 shadow-sm ring-1 ring-black/[0.04] dark:border-gray-800 dark:bg-gray-950 dark:ring-white/[0.06]"
+      onMouseLeave={() => setTip(null)}
+    >
+      <FlameGraphTooltip tip={tip} />
       <p className="mb-3 text-[10px] font-medium tracking-wide text-gray-500 dark:text-gray-400">
         链路火焰条（相对根耗时 {scaleMs}ms 缩放）
       </p>
-      <FlameSpanRow node={traceRoot} scaleMs={scaleMs} />
+      <FlameSpanRow node={traceRoot} scaleMs={scaleMs} onSpanEnter={onSpanEnter} onSpanMove={onSpanMove} />
     </div>
   );
 }

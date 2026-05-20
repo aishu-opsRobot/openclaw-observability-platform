@@ -65,29 +65,39 @@ export function computePropagationHighlightPathIds(nodes, edges) {
 
   /** @type {Map<string, string[]>} */
   const memo = new Map();
+  /** 当前 DFS 栈；图中有环时避免在 memo 写入前无限递归 */
+  const visiting = new Set();
 
   /** @param {string} u */
   function bestFrom(u) {
     if (memo.has(u)) return memo.get(u);
-    const outs = adj.get(u) || [];
-    if (!outs.length) {
-      const p = [u];
-      memo.set(u, p);
-      return p;
+    if (visiting.has(u)) {
+      return [u];
     }
-    let best = [u];
-    for (const v of outs) {
-      const sub = bestFrom(v);
-      const cand = [u, ...sub.slice(1)];
-      if (
-        cand.length > best.length ||
-        (cand.length === best.length && cand.join("\t") < best.join("\t"))
-      ) {
-        best = cand;
+    visiting.add(u);
+    try {
+      const outs = adj.get(u) || [];
+      if (!outs.length) {
+        const p = [u];
+        memo.set(u, p);
+        return p;
       }
+      let best = [u];
+      for (const v of outs) {
+        const sub = bestFrom(v);
+        const cand = [u, ...sub.slice(1)];
+        if (
+          cand.length > best.length ||
+          (cand.length === best.length && cand.join("\t") < best.join("\t"))
+        ) {
+          best = cand;
+        }
+      }
+      memo.set(u, best);
+      return best;
+    } finally {
+      visiting.delete(u);
     }
-    memo.set(u, best);
-    return best;
   }
 
   const roots = [...idSet].filter((id) => !edgeList.some((e) => String(e.target ?? "").trim() === id)).sort();

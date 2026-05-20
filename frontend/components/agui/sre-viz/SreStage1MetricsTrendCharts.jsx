@@ -59,7 +59,7 @@ function chartHeightPx(pointCount) {
   return 248;
 }
 
-function MetricLineBlock({ normalized }) {
+function MetricLineBlock({ normalized, chartHeight }) {
   const gradId = useId().replace(/:/g, "");
   const rows = Array.isArray(normalized?.rows) && normalized.rows.length ? normalized.rows : [];
   const title = String(normalized?.metric_name ?? "metric").trim() || "metric";
@@ -94,7 +94,7 @@ function MetricLineBlock({ normalized }) {
         ) : null}
       </EmbeddedSectionTitle>
       <EmbeddedChartSurface>
-        <ResponsiveContainer width="100%" height={chartHeightPx(rows.length)}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <AreaChart data={rows} margin={{ top: 12, right: 8, left: 4, bottom: 4 }}>
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -189,6 +189,13 @@ export function SreStage1MetricsTrendCharts({ data, variant = "embedded" }) {
     return data.metrics_series.map((s) => normalizeStage1MetricSeries(s)).filter(Boolean);
   }, [data]);
 
+  const unifiedLineChartHeight = useMemo(() => {
+    if (!normalizedList.length) return chartHeightPx(0);
+    return Math.max(
+      ...normalizedList.map((n) => chartHeightPx(Array.isArray(n?.rows) ? n.rows.length : 0)),
+    );
+  }, [normalizedList]);
+
   if (!isStage1MetricsTrendPayload(data)) return null;
 
   const summary = String(data.summary || "").trim();
@@ -207,9 +214,15 @@ export function SreStage1MetricsTrendCharts({ data, variant = "embedded" }) {
           暂无 metrics_series 数据点
         </p>
       ) : (
-        <div className={summary ? "mt-5 space-y-5" : "space-y-5"}>
+        <div
+          className={`grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))] ${summary ? "mt-5" : ""}`}
+        >
           {normalizedList.map((n, idx) => (
-            <MetricLineBlock key={`${n.metric_name}-${n.unit}-${idx}`} normalized={n} />
+            <MetricLineBlock
+              key={`${n.metric_name}-${n.unit}-${idx}`}
+              normalized={n}
+              chartHeight={unifiedLineChartHeight}
+            />
           ))}
         </div>
       )}

@@ -348,9 +348,9 @@ export const SreStage2AnomalyModules = memo(function SreStage2AnomalyModules({ r
         return (
           <section
             key={module.id}
-            className="overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-sm ring-1 ring-black/[0.04] transition-shadow hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:ring-white/[0.06]"
+            className="overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-sm ring-black/[0.04] transition-shadow hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:ring-white/[0.06]"
           >
-            <div className="border-b border-gray-100 bg-gradient-to-r from-gray-50/95 via-white to-slate-50/40 px-4 py-3.5 dark:border-gray-800/50 dark:from-gray-950/50 dark:via-gray-950/30 dark:to-slate-950/25">
+            <div className="border-b border-gray-100 bg-gradient-to-r from-gray-50/95 via-white to-slate-50/40 px-4 py-2.5 dark:border-gray-800/50 dark:from-gray-950/50 dark:via-gray-950/30 dark:to-slate-950/25">
               <h3 className="text-sm font-semibold tracking-tight text-gray-800 dark:text-gray-100">
                 {module.title}
               </h3>

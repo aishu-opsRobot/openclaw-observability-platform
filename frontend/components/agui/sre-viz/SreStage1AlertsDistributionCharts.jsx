@@ -17,10 +17,10 @@ import { normalizeStage1LogCountRows } from "../../../lib/sreStage1LogsDistribut
 
 const FALLBACK_PALETTE = ["#dc2626", "#f97316", "#eab308", "#3b82f6", "#64748b", "#10b981"];
 
-function BarsBlock({ title, data, ariaLabel, yAxisWidth = 120 }) {
+function BarsBlock({ title, data, ariaLabel, yAxisWidth = 120, chartHeight }) {
   if (!data?.length) return null;
   return (
-    <div className="mt-5 first:mt-0">
+    <div className="min-w-0">
       <EmbeddedSectionTitle>{title}</EmbeddedSectionTitle>
       <EmbeddedChartSurface>
         <Stage1DistributionBarChart
@@ -30,6 +30,7 @@ function BarsBlock({ title, data, ariaLabel, yAxisWidth = 120 }) {
           tooltipUnit="条"
           ariaLabel={ariaLabel}
           maxHeight={340}
+          height={chartHeight}
         />
       </EmbeddedChartSurface>
     </div>
@@ -68,6 +69,14 @@ export function SreStage1AlertsDistributionCharts({ data, variant = "embedded" }
       : null;
 
   const hasSummaryPanel = Boolean(summary) || total != null;
+  const hasBars = severityChart.length > 0 || typeChart.length > 0;
+
+  const pairBarChartHeight = useMemo(() => {
+    const h = (len) => Math.min(340, 52 + len * 42);
+    const hs = severityChart.length > 0 ? h(severityChart.length) : 0;
+    const ht = typeChart.length > 0 ? h(typeChart.length) : 0;
+    return Math.max(hs, ht);
+  }, [severityChart, typeChart]);
 
   const body = (
     <>
@@ -81,8 +90,26 @@ export function SreStage1AlertsDistributionCharts({ data, variant = "embedded" }
           ) : null}
         </EmbeddedSummaryPanel>
       ) : null}
-      <BarsBlock title="按严重级别" data={severityChart} ariaLabel="告警条数按严重级别分布" yAxisWidth={128} />
-      <BarsBlock title="按告警类型" data={typeChart} ariaLabel="告警条数按类型分布" yAxisWidth={140} />
+      {hasBars ? (
+        <div
+          className={`grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))] ${hasSummaryPanel ? "mt-5" : ""}`}
+        >
+          <BarsBlock
+            title="按严重级别"
+            data={severityChart}
+            ariaLabel="告警条数按严重级别分布"
+            yAxisWidth={128}
+            chartHeight={pairBarChartHeight}
+          />
+          <BarsBlock
+            title="按告警类型"
+            data={typeChart}
+            ariaLabel="告警条数按类型分布"
+            yAxisWidth={140}
+            chartHeight={pairBarChartHeight}
+          />
+        </div>
+      ) : null}
     </>
   );
 

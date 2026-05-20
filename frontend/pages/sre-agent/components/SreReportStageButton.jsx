@@ -36,7 +36,9 @@ const COLOR_STYLES = {
 
 const SreReportStageButton = memo(function SreReportStageButton({ path, stage, label, color, onOpen }) {
   const styles = COLOR_STYLES[color] ?? COLOR_STYLES.violet;
-  const hint = String(path || "");
+  const hint = String(path || "").trim();
+  const fileHint = hint ? hint.replace(/^.*[/\\]/, "").trim() : "";
+  const showBasename = Boolean(fileHint) && !hint.toLowerCase().endsWith(".json");
 
   const handleClick = () => {
     onOpen?.({ kind: "sre_tab", stage, path });
@@ -45,15 +47,22 @@ const SreReportStageButton = memo(function SreReportStageButton({ path, stage, l
   return (
     <button
       type="button"
-      title={hint}
+      title={hint || undefined}
       onClick={handleClick}
       className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left shadow-sm transition ${styles.wrap}`}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
         <span className={`h-2 w-2 shrink-0 rounded-full ${styles.dot}`} />
-        <span className={`text-[13px] font-medium ${styles.label}`}>{label}</span>
+        <div className="flex min-w-0 flex-1 flex-nowrap items-baseline gap-x-2 gap-y-0.5 overflow-hidden">
+          <span className={`${showBasename ? "shrink-0" : "min-w-0 truncate"} text-[13px] font-medium ${styles.label}`}>
+            {label}
+          </span>
+          {showBasename ? (
+            <span className={`min-w-0 truncate font-mono text-[11px] font-normal opacity-85 ${styles.hint}`}>{fileHint}</span>
+          ) : null}
+        </div>
       </div>
-      <span className={`shrink-0 text-[12px] ${styles.hint}`}>在右侧打开</span>
+      <span className={`shrink-0 text-[12px] ${styles.hint}`}>工作区打开</span>
     </button>
   );
 });

@@ -16,11 +16,17 @@ import {
 } from "../../../lib/sreStage1LogsDistribution.js";
 
 const FALLBACK_PALETTE = ["#3b82f6", "#eab308", "#f97316", "#dc2626", "#5470c6", "#64748b", "#10b981"];
+const BAR_CHART_MAX_H = 320;
 
-function BarsBlock({ title, data, ariaLabel }) {
+function barsChartHeightFromRowCount(rowCount) {
+  return Math.min(BAR_CHART_MAX_H, 52 + rowCount * 42);
+}
+
+/** @param {{ title: string; data: object[]; ariaLabel: string; height?: number }} props */
+function BarsBlock({ title, data, ariaLabel, height: chartHeight }) {
   if (!data?.length) return null;
   return (
-    <div className="mt-5 first:mt-0">
+    <div className="min-w-0 flex-1">
       <EmbeddedSectionTitle>{title}</EmbeddedSectionTitle>
       <EmbeddedChartSurface>
         <Stage1DistributionBarChart
@@ -29,7 +35,8 @@ function BarsBlock({ title, data, ariaLabel }) {
           yAxisWidth={112}
           tooltipUnit="条数"
           ariaLabel={ariaLabel}
-          maxHeight={320}
+          maxHeight={BAR_CHART_MAX_H}
+          {...(chartHeight != null ? { height: chartHeight } : {})}
         />
       </EmbeddedChartSurface>
     </div>
@@ -96,6 +103,11 @@ export function SreStage1LogsDistributionCharts({ data, variant = "embedded" }) 
 
   const hasSummaryPanel = Boolean(summary) || err != null || norm != null;
 
+  const pairedBarChartHeight = useMemo(() => {
+    if (!levelChart.length || !serviceChart.length) return undefined;
+    return barsChartHeightFromRowCount(Math.max(levelChart.length, serviceChart.length));
+  }, [levelChart.length, serviceChart.length]);
+
   const body = (
     <>
       {hasSummaryPanel ? (
@@ -113,8 +125,20 @@ export function SreStage1LogsDistributionCharts({ data, variant = "embedded" }) 
           )}
         </EmbeddedSummaryPanel>
       ) : null}
-      <BarsBlock title="按日志级别" data={levelChart} ariaLabel="日志条数按级别分布" />
-      <BarsBlock title="按服务" data={serviceChart} ariaLabel="日志条数按服务分布" />
+      <div className="flex flex-col gap-5 md:flex-row md:gap-4 md:items-stretch">
+        <BarsBlock
+          title="按日志级别"
+          data={levelChart}
+          ariaLabel="日志条数按级别分布"
+          height={pairedBarChartHeight}
+        />
+        <BarsBlock
+          title="按服务"
+          data={serviceChart}
+          ariaLabel="日志条数按服务分布"
+          height={pairedBarChartHeight}
+        />
+      </div>
     </>
   );
 

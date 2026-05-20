@@ -51,7 +51,7 @@ export default function SreAgentChatWorkspace({
       style={{ height: "calc(100% + 48px)" }}
     >
       <div
-        className="flex shrink-0 flex-col border-r border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-950/30"
+        className="flex shrink-0 flex-col bg-gray-50/50 dark:border-gray-700 dark:bg-gray-950/30"
         style={{ width: splitLeftPx, minWidth: CHAT_SPLIT_MIN }}
       >
         <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-2.5 dark:border-gray-700">
